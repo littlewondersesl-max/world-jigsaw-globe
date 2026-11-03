@@ -86,6 +86,27 @@ for(int i=0;i<4;i++){if(cw[i]>0.){float e=ell(LL,cb[i],.12);vec2 cu=(LL-cb[i].xy
 #pragma unroll_loop_end
 float dif=max(dot(normalize(wn),sun),0.);vec3 c=mp*(.3+.95*dif)+vec3(1.,.85,.5)*smoothstep(rv-.05,rv,rd)*(rv<1.4?1.2:0.);gl_FragColor=vec4(pow(c,vec3(1./2.2)),1.);}`});
 const brazil=new THREE.Mesh(new THREE.PlaneGeometry(1,1,260,260),bmat);brazil.frustumCulled=false;brazil.visible=false;brazil.renderOrder=2;G.add(brazil);
+
+// ---- rest of South America: one continent-wide look-3 patch, countries switched on by id (hair-thin shared borders) ----
+const SAP='previews/south-america/';const SAN=await (await fetch(SAP+'ids.json')).json();
+const ltx=(n,near)=>{const t=new THREE.TextureLoader().load(SAP+n);if(near){t.minFilter=t.magFilter=THREE.NearestFilter;t.generateMipmaps=false}else t.anisotropy=8;return t};
+const smap=ltx('c3.jpg');smap.colorSpace=THREE.SRGBColorSpace;
+const SU={sun:U.sun,map:{value:smap},hgt:{value:ltx('height.png')},ids:{value:ltx('ids.png',true)},bb:{value:new THREE.Vector4(-82,-56,-34,13)},vex:PU.vex,lift:PU.lift,
+ on:{value:new Array(16).fill(0)},rid:{value:-1},rc:{value:new THREE.Vector3()},rr:{value:0},px:{value:new THREE.Vector2(1/1325,1/2048)}};
+const smat=new THREE.ShaderMaterial({uniforms:SU,
+vertexShader:`uniform float vex,lift;uniform vec4 bb;uniform sampler2D hgt;varying vec2 vu;varying vec3 wn,s;
+void main(){vu=uv;float lon=mix(bb.x,bb.z,uv.x),lat=mix(bb.y,bb.w,uv.y);float hh=texture2D(hgt,uv).r;hh*=hh;float la=radians(lat),lo=radians(lon);
+s=vec3(cos(la)*sin(lo),sin(la),cos(la)*cos(lo));wn=normalize(mat3(modelMatrix)*s);gl_Position=projectionMatrix*modelViewMatrix*vec4(s*(1.5+lift+hh*vex),1.);}`,
+fragmentShader:`uniform sampler2D map,ids;uniform float on[16];uniform float rid,rr;uniform vec3 rc,sun;uniform vec2 px;varying vec2 vu;varying vec3 wn,s;
+int idAt(vec2 u){return int(texture2D(ids,u).r*255.+.5);}
+void main(){int id=idAt(vu);if(id==0||id==3||on[id]<.5)discard;float d=acos(clamp(dot(normalize(s),rc),-1.,1.));bool rev=float(id)==rid;if(rev&&d>rr)discard;
+vec3 mp=pow(texture2D(map,vu).rgb,vec3(2.2));
+int a=idAt(vu+vec2(px.x,0.)),b=idAt(vu-vec2(px.x,0.)),c=idAt(vu+vec2(0.,px.y)),e=idAt(vu-vec2(0.,px.y));
+float bd=((a!=id&&a!=0)||(b!=id&&b!=0)||(c!=id&&c!=0)||(e!=id&&e!=0))?1.:0.;mp=mix(mp,mp*.45,bd*.55);
+float dif=max(dot(normalize(wn),sun),0.);vec3 col=mp*(.3+.95*dif);if(rev)col+=vec3(1.,.85,.5)*smoothstep(rr-.05,rr,d)*1.2;
+gl_FragColor=vec4(pow(col,vec3(1./2.2)),1.);}`});
+const sapatch=new THREE.Mesh(new THREE.PlaneGeometry(1,1,500,760),smat);sapatch.frustumCulled=false;sapatch.renderOrder=2;sapatch.visible=false;G.add(sapatch);
+const saId=n=>SAN.indexOf(n)+1;
 // ---- city streaming (LOD + activity gating) ----
 const KM=1.5/6371;let brPlaced=false;const CS=(CITIES.BR||[]).map((c,i)=>({...c,base:c.base.replace('../','previews/'),i,state:'idle',obj:null}));
 for(const c of CS){c.up=sv(c.lon,c.lat);c.pos=c.up.clone().multiplyScalar(1.5+.004+.00004);}
@@ -126,10 +147,11 @@ const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;let anims=[];const anim=(ms,fn
 let queue=Promise.resolve();
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
+ const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
  fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
-function placeNow(f,cont){if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
-function clear(){bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;for(const c of CS)unload(c);}
+function placeNow(f,cont){const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;for(const c of CS)unload(c);}
 let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
 // camera
 function camDist(){return C.position.distanceTo(O.target.lengthSq()>1?O.target.clone().multiplyScalar(0):O.target)}
