@@ -77,7 +77,7 @@ function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left=(x-drag.half)+'px';gh
 function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.pointerId);drag={p,el,x:e.clientX,y:e.clientY,moved:false};
  ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);ghost.style.display='none';updateGhostShape();
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
- el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved&&ev.type==='pointerup')drop(d.p,ev.clientX,ev.clientY);};}
+ el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved&&ev.type==='pointerup')window.__release(d.p,ev.clientX,ev.clientY);};}
 window.addEventListener('wheel',e=>{if(drag){e.preventDefault();setAngle(drag.p,drag.p.angle+(e.deltaY>0?15:-15));}},{passive:false,capture:true});
 window.addEventListener('keydown',e=>{if(!sel)return;if(e.key=='q'||e.key=='Q')setAngle(sel,sel.angle-15);if(e.key=='e'||e.key=='E')setAngle(sel,sel.angle+15);});
 $('rl').onclick=()=>sel&&setAngle(sel,sel.angle-15);$('rr').onclick=()=>sel&&setAngle(sel,sel.angle+15);
@@ -197,6 +197,80 @@ function drawPtr(){const f=byName[hot];if(!f)return;const c=d3.geoCentroid(f);
  hotRaf=requestAnimationFrame(drawPtr);}
 (function hook(){if(!window.G3)return setTimeout(hook,200);G3.dom.addEventListener('pointermove',e=>{if(e.buttons||!placed.size)return;const ll=G3.pick(e.clientX,e.clientY);let n=null;  if(ll)for(const k of placed)if(d3.geoContains(byName[k],ll)){n=k;break}setHot(n);}); G3.dom.addEventListener('pointerleave',()=>setHot(null)); })();
 window.__game.hot=setHot;
+// ---- sliding drawers + stack ----
+// Two full-height wooden drawers slide in from the screen edges as overlays. They meet in the middle; pulling one further
+// pushes the other shut. Left: every loose piece ("All pieces"). Right: one compartment per continent for guessed pieces.
+// Pieces inside get light 2D physics (inertia from the drawer, hops, sliding off each other). Sounds are synthesised here.
+const CONTS=['Africa','Asia','Europe','North America','South America','Oceania'];
+function contOf(n){const s=(FACTS[n]||[''])[0];for(const c of CONTS)if(s.includes(c))return c;if(/Antarctica/.test(s))return 'Oceania';if(/America/.test(s))return 'North America';return 'Asia';}
+let DAC=null;function dac(){if(muted)return null;try{DAC=DAC||new (window.AudioContext||window.webkitAudioContext)();if(DAC.state=='suspended')DAC.resume();}catch(e){return null}return DAC;}
+let roll=null;function rollSnd(speed){const a=dac();if(!a)return;if(!roll){const n=a.createBuffer(1,a.sampleRate*2,a.sampleRate),d=n.getChannelData(0);let b=0;for(let i=0;i<d.length;i++){b=b*.97+(Math.random()*2-1)*.03;d[i]=b*6+(Math.random()*2-1)*.04;}
+ const s=a.createBufferSource();s.buffer=n;s.loop=true;const f=a.createBiquadFilter();f.type='bandpass';f.frequency.value=160;f.Q.value=.8;const g=a.createGain();g.gain.value=0;s.connect(f).connect(g).connect(a.destination);s.start();roll={g,f,s,acc:0};}
+ const v=Math.min(1,Math.abs(speed)/25);roll.g.gain.setTargetAtTime(v*.5,a.currentTime,.03);roll.f.frequency.setTargetAtTime(120+v*160,a.currentTime,.05);
+ roll.acc+=Math.abs(speed);if(roll.acc>38){roll.acc=0;knock(.05+v*.08,900);}}
+function knock(vol,fr){const a=dac();if(!a)return;const t=a.currentTime,o=a.createOscillator(),g=a.createGain(),f=a.createBiquadFilter();o.type='triangle';o.frequency.setValueAtTime(fr||420,t);o.frequency.exponentialRampToValueAtTime((fr||420)*.6,t+.06);
+ f.type='lowpass';f.frequency.value=1800;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+.09);o.connect(f).connect(g).connect(a.destination);o.start(t);o.stop(t+.1);}
+const DR={};const PS=62;const dwrap=document.createElement('div');dwrap.id='dwrap';document.body.appendChild(dwrap);
+for(const side of ['L','R']){const d=document.createElement('div');d.className='drawer d'+side;d.innerHTML=`<div class="din"></div><div class="dh" title="Drag to open"></div>`;dwrap.appendChild(d);
+ const o={side,el:d,in:d.firstChild,h:d.lastChild,open:0,v:0,pv:0,bodies:[]};DR[side]=o;
+ if(side==='L')o.in.insertAdjacentHTML('beforeend','<div class="carve">All pieces</div>');
+ else o.in.insertAdjacentHTML('beforeend',CONTS.map(c=>`<div class="sec" data-c="${c}"><div class="carve">${c}</div></div>`).join(''));
+ o.h.addEventListener('pointerdown',e=>{e.preventDefault();o.h.setPointerCapture(e.pointerId);dac();const x0=e.clientX,a0=o.open;let lx=e.clientX,lt=performance.now();
+  o.h.onpointermove=ev=>{const W=innerWidth,dx=ev.clientX-x0;setOpen(o,a0+(side==='L'?dx:-dx));const t=performance.now();o.fling=(side==='L'?1:-1)*(ev.clientX-lx)/Math.max(1,t-lt)*16;lx=ev.clientX;lt=t;};
+  o.h.onpointerup=o.h.onpointercancel=()=>{o.h.onpointermove=o.h.onpointerup=o.h.onpointercancel=null;o.glide=o.fling||0;o.fling=0;kick();};});}
+function oth(o){return DR[o.side==='L'?'R':'L']}
+function setOpen(o,v){const W=innerWidth;v=Math.max(0,Math.min(W,v));o.open=v;const q=oth(o);if(v+q.open>W)q.open=W-v;kick();}
+function secRects(){const o=DR.R,W=innerWidth,H=innerHeight,cols=W>H?6:2,rows=W>H?1:3,cw=W/cols,rh=(H-0)/rows;return CONTS.map((c,i)=>({c,x:(i%cols)*cw,y:Math.floor(i/cols)*rh,w:cw,h:rh}));}
+function layoutSecs(){const R=secRects();[...DR.R.in.querySelectorAll('.sec')].forEach((s,i)=>{const r=R[i];Object.assign(s.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px'})});}
+function bounds(o,b){const W=innerWidth,H=innerHeight;if(o.side==='L')return {x:10,y:10,w:W-20,h:H-56};const r=secRects().find(r=>r.c===b.sec)||secRects()[0];return {x:r.x+6,y:r.y+26,w:r.w-12,h:r.h-32};}
+function pieceEl(p){const e=document.createElement('div');e.className='dp';const g=shapeSVG(p.f,trayScale(p.f)*PS/86);e.innerHTML=g.svg;const sv=e.firstChild;sv.setAttribute('width',PS);sv.setAttribute('height',PS);sv.style.transform=`rotate(${p.angle}deg)`;
+ e.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();carry(p,ev,e);});return e;}
+function addBody(side,p,x,y,hop,sec){remBody(p);const o=DR[side],b={p,x,y,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,z:hop?28:0,vz:0,r:PS*.36,sec:side==='R'?(sec||contOf(p.f.name)):null};
+ b.el=pieceEl(p);o.in.appendChild(b.el);o.bodies.push(b);p.dloc=side;p.body=b;clampB(o,b);kick();return b;}
+function remBody(p){const b=p.body;if(!b)return;for(const s in DR){const o=DR[s],i=o.bodies.indexOf(b);if(i>=0)o.bodies.splice(i,1);}b.el.remove();p.body=null;p.dloc=null;}
+function clampB(o,b){const r=bounds(o,b);if(b.x<r.x+b.r){b.x=r.x+b.r;b.vx=Math.abs(b.vx)*.3}if(b.x>r.x+r.w-b.r){b.x=r.x+r.w-b.r;b.vx=-Math.abs(b.vx)*.3}if(b.y<r.y+b.r){b.y=r.y+b.r;b.vy=Math.abs(b.vy)*.3}if(b.y>r.y+r.h-b.r){b.y=r.y+r.h-b.r;b.vy=-Math.abs(b.vy)*.3}}
+let raf=0;function kick(){if(!raf)raf=requestAnimationFrame(step);}
+function step(){raf=0;let busy=false;const W=innerWidth;
+ for(const s in DR){const o=DR[s];if(o.glide){setOpen(o,o.open+o.glide);o.glide*=.86;if(Math.abs(o.glide)<.3||o.open<=0||o.open>=W)o.glide=0;}
+  if(o.open<24&&!o.h.onpointermove&&!o.glide&&o.open>0)o.open=Math.max(0,o.open-4);
+  const v=o.open-o.pv;const acc=v-o.v;o.v=v;o.pv=o.open;if(Math.abs(v)>.05||o.glide)busy=true;
+  o.el.style.transform=s==='L'?`translateX(${o.open-W}px)`:`translateX(${W-o.open}px)`;o.el.classList.toggle('shut',o.open<1);
+  if(Math.abs(v)>.05)rollSnd(v);
+  const dir=s==='L'?1:-1,B=o.bodies;
+  for(const b of B){if(Math.abs(acc)>.05&&!b.z){b.vx-=Math.max(-3,Math.min(3,acc))*dir*.35;}
+   if(b.z>0||b.vz){b.vz-=1.6;b.z+=b.vz;if(b.z<=0){b.z=0;if(b.vz<-5){b.vz=-b.vz*.38;knock(Math.min(.25,-b.vz*.02+.04),380+Math.random()*120)}else b.vz=0;}}
+   b.vx*=.9;b.vy*=.9;b.x+=b.vx;b.y+=b.vy;clampB(o,b);}
+  for(let i=0;i<B.length;i++)for(let j=i+1;j<B.length;j++){const a=B[i],c=B[j];if(a.sec!==c.sec)continue;const dx=c.x-a.x,dy=c.y-a.y,dd=dx*dx+dy*dy,m=(a.r+c.r)*.8;
+   if(dd<m*m){const d=Math.sqrt(dd)||.01,push=(m-d)*.12,nx=dx/d||Math.random()-.5,ny=dy/d||Math.random()-.5;c.vx+=nx*push;c.vy+=ny*push;a.vx-=nx*push*.5;a.vy-=ny*push*.5;}}
+  for(const b of B){if(Math.abs(b.vx)+Math.abs(b.vy)>.05||b.z>0)busy=true;b.el.style.transform=`translate(${b.x-PS/2}px,${b.y-PS/2-b.z}px) scale(${1+b.z*.006})`;b.el.style.zIndex=b.z>0?5:1;}}
+ if(Math.abs(DR.L.v)<.05&&Math.abs(DR.R.v)<.05&&roll)roll.g.gain.setTargetAtTime(0,DAC.currentTime,.05);
+ if(busy)kick();}
+// which drawer (and where in it) is under a screen point
+function drawerAt(x,y){const W=innerWidth;if(DR.L.open>0&&x<DR.L.open)return {side:'L',x:x+W-DR.L.open,y};if(DR.R.open>0&&x>W-DR.R.open)return {side:'R',x:x-(W-DR.R.open),y};return null;}
+function secAt(lx,ly){const r=secRects().find(r=>lx>=r.x&&lx<r.x+r.w&&ly>=r.y&&ly<r.y+r.h);return r?r.c:null;}
+// release a held piece: into a drawer, else onto the globe (anything not placed/parked goes back to the left drawer)
+function release(p,x,y){const d=drawerAt(x,y);if(d){if(p.parked)unpark(p);addBody(d.side,p,d.x,d.y,true,d.side==='R'?secAt(d.x,d.y):null);renderTray();return;}
+ drop(p,x,y);if(!placed.has(p.f.name)&&!p.parked&&!p.body){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}syncDrawers();}
+window.__release=release;
+// carry: piece follows the pointer. A drag releases on lift; a click/tap keeps it on the cursor until the next click/tap.
+let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';
+ drag={p,el:src,x:e.clientX,y:e.clientY,moved:true};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
+ const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0;carrying=p;
+ const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{downs++;ev.stopPropagation();ev.preventDefault();},
+  up=ev=>{const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
+   removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);
+   drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY);};
+ addEventListener('pointermove',mv,true);addEventListener('pointerdown',dn,true);addEventListener('pointerup',up,true);}
+// stack bottom-left: a random loose piece from the left drawer
+const stk=document.createElement('div');stk.id='stack';stk.title='Take a piece';document.body.appendChild(stk);
+function drawStack(){const L=pieces.filter(p=>p.dloc==='L');stk.innerHTML=L.slice(0,4).map((p,i)=>`<div class="sp" style="transform:translate(${i*2}px,${-i*3}px) rotate(${(i*37)%20-10}deg)">${shapeSVG(p.f,trayScale(p.f)*.6).svg}</div>`).join('')+`<b>${L.length}</b>`;stk.classList.toggle('empty',!L.length);}
+stk.addEventListener('pointerdown',e=>{e.preventDefault();const L=pieces.filter(p=>p.dloc==='L');if(!L.length)return;stk.animate([{transform:'scale(1)'},{transform:'scale(.86,.8)'},{transform:'scale(1)'}],{duration:220});knock(.12,300);carry(L[0],e,stk);});
+function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p))remBody(b.p);for(const p of pieces){const gone=placed.has(p.f.name)||p.parked;if(gone&&p.body)remBody(p);
+  else if(!gone&&!p.body&&carrying!==p)addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),false);}drawStack();}
+const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')syncDrawers();};
+addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
+syncDrawers();kick();
+Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();
 (function(){const B=document.getElementById('menuB'),L=document.getElementById('menuL'),P=document.getElementById('credP');if(!B)return;
 B.onclick=e=>{e.stopPropagation();L.hidden=!L.hidden;B.setAttribute('aria-expanded',!L.hidden)};document.addEventListener('click',e=>{if(!L.hidden&&!L.contains(e.target)){L.hidden=true;B.setAttribute('aria-expanded',false)}});
