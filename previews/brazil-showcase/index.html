@@ -3,78 +3,27 @@
 <style>html,body{margin:0;height:100%;background:#1d1b19;color:#e8e0d2;font:13px/1.4 Georgia,serif;overflow:hidden}
 #ui{position:fixed;left:16px;top:14px;z-index:2}#ui h1{font-weight:normal;font-size:20px;margin:0 0 6px;letter-spacing:.06em}
 #ui button{background:#2b2825;color:#e8e0d2;border:1px solid #5a5248;padding:4px 9px;margin:2px;font:12px Georgia;cursor:pointer}
-#ui a{color:#c9b48a}#cr{position:fixed;right:12px;bottom:8px;font-size:11px;opacity:.6}</style>
-<script type="importmap">{"imports":{"three":"../brazil/three.module.js","three/addons/":"../brazil/"}}</script></head><body>
-<div id="ui"><h1>RIO DE JANEIRO</h1><div id="b"></div><div style="margin-top:6px"><a href="../brazil/">Brazil map</a> · <a href="../globe-reveal/">Globe reveal</a></div></div>
-<div id="cr">Map data © OpenStreetMap contributors (ODbL) · Terrain: Mapzen/AWS Terrain Tiles</div>
+#ui a{color:#c9b48a}#cr{position:fixed;right:12px;bottom:8px;font-size:11px;opacity:.6}#fps{position:fixed;right:12px;top:10px;font:11px monospace;opacity:.6}</style>
+<script type="importmap">{"imports":{"three":"../brazil/three.module.js"}}</script></head><body>
+<div id="ui"><h1>RIO DE JANEIRO</h1><div id="b"></div><div style="margin-top:6px"><a href="../brazil/">Brazil map</a> · <a href="../globe-reveal/">Globe reveal</a> · <a href="../globe-zoom/">Globe zoom</a></div></div>
+<div id="fps"></div><div id="cr">Map data © OpenStreetMap contributors (ODbL) · Terrain: Mapzen/AWS Terrain Tiles</div>
 <script type="module">
-import * as THREE from 'three';import {OrbitControls} from '../brazil/OrbitControls.js';
+import * as THREE from 'three';import {OrbitControls} from '../brazil/OrbitControls.js';import {loadCity} from '../lib/city.js';
 const still=location.search.includes('still');
-const M=await (await fetch('rio_meta.json')).json();const {WX,HZ,GW,GH,U}=M;const [LO0,LO1,LA0,LA1]=M.bbox;
 const R=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});R.setPixelRatio(Math.min(devicePixelRatio,2));R.setSize(innerWidth,innerHeight);
 R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.05;R.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(R.domElement);
 const S=new THREE.Scene();S.background=new THREE.Color(0x1d1b19);
 const C=new THREE.PerspectiveCamera(35,innerWidth/innerHeight,.002,40);const O=new OrbitControls(C,R.domElement);O.enableDamping=!still;O.maxPolarAngle=1.45;
-S.add(new THREE.HemisphereLight(0xfff4e6,0x40382e,.9));const sun=new THREE.DirectionalLight(0xfff0dc,2.2);sun.position.set(-2,3,-1.5);sun.castShadow=true;
+S.add(new THREE.HemisphereLight(0xfff4e6,0x40382e,.9));const sd=new THREE.Vector3(-2,3,-1.5);const sun=new THREE.DirectionalLight(0xfff0dc,2.2);sun.position.copy(sd);sun.castShadow=true;
 sun.shadow.mapSize.set(4096,4096);Object.assign(sun.shadow.camera,{left:-2.3,right:2.3,top:1.5,bottom:-1.5,near:.1,far:10});sun.shadow.bias=-.0004;sun.shadow.normalBias=.002;S.add(sun);
-const G=new THREE.Group();G.position.set(-WX/2,0,-HZ/2);S.add(G);
-const ab=async f=>(await fetch(f)).arrayBuffer();
-const q=new Uint16Array(await ab('rio_h.bin'));const H=new Float32Array(q.length);for(let i=0;i<q.length;i++)H[i]=(q[i]/50-60)*U;
-const hAt=(x,z)=>{const fx=Math.min(GW-1.001,Math.max(0,x/WX*(GW-1))),fz=Math.min(GH-1.001,Math.max(0,z/HZ*(GH-1)));const i=fx|0,j=fz|0,a=fx-i,b=fz-j,k=j*GW+i;
- return H[k]*(1-a)*(1-b)+H[k+1]*a*(1-b)+H[k+GW]*(1-a)*b+H[k+GW+1]*a*b};
-const ll=(lo,la)=>[(lo-LO0)/(LO1-LO0)*WX,(LA1-la)/(LA1-LA0)*HZ];
-const tl=new THREE.TextureLoader();const tc=tl.load('rio_c.jpg');tc.colorSpace=THREE.SRGBColorSpace;tc.anisotropy=8;const tn=tl.load('rio_n.jpg');
-const tg=new THREE.PlaneGeometry(WX,HZ,GW-1,GH-1);tg.rotateX(-Math.PI/2);tg.translate(WX/2,0,HZ/2);const p=tg.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,H[i]);tg.computeVertexNormals();
-const terr=new THREE.Mesh(tg,new THREE.MeshStandardMaterial({map:tc,normalMap:tn,normalScale:new THREE.Vector2(.6,.6),roughness:.92}));terr.receiveShadow=true;G.add(terr);
-const wat=new THREE.Mesh(new THREE.PlaneGeometry(WX,HZ),new THREE.MeshPhysicalMaterial({color:0x2a6f78,transparent:true,opacity:.38,roughness:.08,metalness:0,clearcoat:1}));
-wat.rotation.x=-Math.PI/2;wat.position.set(WX/2,.00015,HZ/2);wat.receiveShadow=true;G.add(wat);
-// walls
-const base=-.035,wm=new THREE.MeshStandardMaterial({color:0xe9e1d2,roughness:.85});
-function wall(pts){const g=new THREE.BufferGeometry(),v=[];for(let i=0;i<pts.length-1;i++){const[a,b]=[pts[i],pts[i+1]];const ha=Math.max(hAt(...a),0),hb=Math.max(hAt(...b),0);
- v.push(a[0],ha,a[1],a[0],base,a[1],b[0],hb,b[1],b[0],hb,b[1],a[0],base,a[1],b[0],base,b[1]);}g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.computeVertexNormals();
- const m=new THREE.Mesh(g,wm);m.material.side=THREE.DoubleSide;G.add(m)}
-const edge=(f)=>{const a=[];for(let i=0;i<=400;i++)a.push(f(i/400));return a};
-wall(edge(t=>[t*WX,0]));wall(edge(t=>[t*WX,HZ]));wall(edge(t=>[0,t*HZ]));wall(edge(t=>[WX,t*HZ]));
-const cap=new THREE.Mesh(new THREE.BoxGeometry(WX+.06,.02,HZ+.06),new THREE.MeshStandardMaterial({color:0x3a2c22,roughness:.7}));cap.position.set(WX/2,base-.01,HZ/2);cap.receiveShadow=true;G.add(cap);
-// buildings
-{const b=new Uint16Array(await ab('rio_b.bin'));const L=[WX,HZ,2*Math.PI,.01,.01,.03,1,1,1,1];const n=b.length/10;
- const bg=new THREE.BoxGeometry(1,1,1);bg.translate(0,.5,0);const im=new THREE.InstancedMesh(bg,new THREE.MeshStandardMaterial({roughness:.8}),n);
- const m=new THREE.Matrix4(),qq=new THREE.Quaternion(),e=new THREE.Euler(),c=new THREE.Color(),Y=new THREE.Vector3(0,1,0);
- for(let i=0;i<n;i++){const r=k=>b[i*10+k]/65535*L[k];const x=r(0),z=r(1),w=Math.max(r(3),.00025),d=Math.max(r(4),.00025),h=r(5);
-  qq.setFromAxisAngle(Y,r(2));m.compose(new THREE.Vector3(x,hAt(x,z)-.0003,z),qq,new THREE.Vector3(w,h+.0003,d));im.setMatrixAt(i,m);
-  c.setRGB(r(6),r(7),r(8),THREE.SRGBColorSpace);im.setColorAt(i,c)}
- im.castShadow=im.receiveShadow=true;G.add(im)}
-// trees
-{const b=new Uint16Array(await ab('rio_t.bin'));const L=[WX,HZ,.003,255,255,255];const n=b.length/6;
- const tg=new THREE.IcosahedronGeometry(1,0);tg.scale(1,1.15,1);tg.translate(0,.75,0);const im=new THREE.InstancedMesh(tg,new THREE.MeshStandardMaterial({roughness:1,flatShading:true}),n);
- const m=new THREE.Matrix4(),c=new THREE.Color(),qq=new THREE.Quaternion();
- for(let i=0;i<n;i++){const r=k=>b[i*6+k]/65535*L[k];const x=r(0),z=r(1),s=Math.max(r(2),.0003);
-  m.compose(new THREE.Vector3(x,hAt(x,z)-s*.35,z),qq,new THREE.Vector3(s,s,s));im.setMatrixAt(i,m);c.setRGB(r(3)/255,r(4)/255,r(5)/255,THREE.SRGBColorSpace);im.setColorAt(i,c)}
- im.castShadow=true;im.receiveShadow=true;G.add(im)}
-// bridges
-{const bm=new THREE.MeshStandardMaterial({color:0xd8d2c6,roughness:.7});
- for(const L of M.bridges)for(let i=0;i<L.length-1;i++){const[a,b]=[L[i],L[i+1]];const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);if(len<1e-6)continue;
-  const y=Math.max(hAt((a[0]+b[0])/2,(a[1]+b[1])/2),0)+.0012;const k=new THREE.Mesh(new THREE.BoxGeometry(len,.0004,.0018),bm);
-  k.position.set((a[0]+b[0])/2,y,(a[1]+b[1])/2);k.rotation.y=-Math.atan2(dz,dx);k.castShadow=true;G.add(k)}}
-// landmarks
-const white=new THREE.MeshStandardMaterial({color:0xf3efe6,roughness:.55});
-{const [x,z]=ll(-43.21055,-22.95192);const y=hAt(x,z);const g=new THREE.Group();const s=.0016;
- const add=(geo,px,py,pz)=>{const m=new THREE.Mesh(geo,white);m.position.set(px,py,pz);m.castShadow=true;g.add(m)};
- add(new THREE.BoxGeometry(.9,1,.9),0,.5,0);add(new THREE.CylinderGeometry(.32,.45,3,10),0,2.5,0);add(new THREE.BoxGeometry(3.4,.32,.32),0,3.65,0);add(new THREE.SphereGeometry(.27,10,8),0,4.2,0);
- g.position.set(x,y-.0004,z);g.scale.setScalar(s);g.rotation.y=.35;G.add(g)}
-{const pts=[[-43.1647,-22.9554],[-43.1620,-22.9503],[-43.1566,-22.9488]].map(a=>{const[x,z]=ll(...a);return new THREE.Vector3(x,hAt(x,z)+.0015,z)});
- const lm=new THREE.LineBasicMaterial({color:0x2a2622});for(let i=0;i<2;i++){G.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([pts[i],pts[i+1]]),lm));
-  const c=new THREE.Mesh(new THREE.BoxGeometry(.0009,.0007,.0007),new THREE.MeshStandardMaterial({color:0xc8433a}));c.position.lerpVectors(pts[i],pts[i+1],.45).y-=.0005;G.add(c)}}
-{const [x,z]=ll(-43.2302,-22.9122);const r=new THREE.Mesh(new THREE.TorusGeometry(.0105,.0028,6,40),white);r.rotation.x=-Math.PI/2;r.scale.z=.35;r.position.set(x,hAt(x,z)+.0008,z);r.castShadow=true;G.add(r);
- const f=new THREE.Mesh(new THREE.CircleGeometry(.0085,32),new THREE.MeshStandardMaterial({color:0x4f8a3e}));f.rotation.x=-Math.PI/2;f.scale.set(1.15,.85,1);f.position.set(x,hAt(x,z)+.0003,z);G.add(f)}
-// presets [lon,lat, dist, polar, azim]
-const P={overview:[-43.225,-22.915,4.2,.85,0],copacabana:[-43.185,-22.972,.42,.95,.3],sugarloaf:[-43.160,-22.950,.22,1.05,-.6],corcovado:[-43.2105,-22.952,.16,1.0,.9],
- centro:[-43.180,-22.905,.38,.9,.2],niteroi:[-43.110,-22.905,.5,.95,-.4],lagoa:[-43.210,-22.975,.35,.95,0],tijuca:[-43.265,-22.950,1.0,.95,.5],barra:[-43.35,-23.0,.9,1.0,.2]};
-window.SH=k=>{const[lo,la,d,pol,az]=P[k];const[x,z]=ll(lo,la);const t=new THREE.Vector3(x-WX/2,Math.max(hAt(x,z),0),z-HZ/2);
+const city=await loadCity('./','rio_',{walls:true,shadows:true,sun:sd.clone().normalize()});S.add(city.root);
+const P={overview:[-43.225,-22.915,4.2,.85,0],copacabana:[-43.185,-22.972,.42,.95,.3],sugarloaf:[-43.160,-22.952,.16,1.05,-.6],corcovado:[-43.2105,-22.952,.16,1.0,.9],
+ centro:[-43.1775,-22.9045,.2,.9,.35],niteroi:[-43.110,-22.905,.5,.95,-.4],lagoa:[-43.210,-22.975,.35,.95,0],tijuca:[-43.265,-22.950,1.0,.95,.5],barra:[-43.35,-23.0,.9,1.0,.2]};
+window.SH=k=>{const[lo,la,d,pol,az]=P[k];const[x,z]=city.ll(lo,la);const t=new THREE.Vector3(x,Math.max(city.hAt(x,z),0),z);
  O.target.copy(t);C.position.set(t.x+d*Math.sin(pol)*Math.sin(az),t.y+d*Math.cos(pol),t.z+d*Math.sin(pol)*Math.cos(az));O.update();};
 const bd=document.getElementById('b');for(const k in P){const e=document.createElement('button');e.textContent=k;e.onclick=()=>SH(k);bd.appendChild(e)}
 SH('overview');addEventListener('resize',()=>{C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix();R.setSize(innerWidth,innerHeight)});
-window.shot=k=>{SH(k);O.update();R.render(S,C);return R.domElement.toDataURL()};
-await new Promise(r=>{const t=()=>tc.image&&tc.image.complete?r():setTimeout(t,50);t()});
-R.setAnimationLoop(()=>{O.update();R.render(S,C)});window.ready=true;
+window.shot=k=>{SH(k);city.tick(3);R.render(S,C);return R.domElement.toDataURL()};
+const fe=document.getElementById('fps');let fc=0,ft=performance.now();
+R.setAnimationLoop(now=>{city.tick(now/1000);O.update();R.render(S,C);fc++;if(now-ft>500){fe.textContent=(fc*1000/(now-ft)).toFixed(0)+' fps';fc=0;ft=now}});window.ready=true;
 </script></body></html>

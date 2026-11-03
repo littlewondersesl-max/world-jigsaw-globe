@@ -1,0 +1,9 @@
+[out:json][timeout:180];
+(
+ way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_space)$"](-23.10,-43.80,-22.75,-42.95);
+ way["natural"~"^(water|beach|wood|bare_rock|sand)$"](-23.10,-43.80,-22.75,-42.95);
+ relation["natural"="water"](-23.10,-43.80,-22.75,-42.95);
+ way["landuse"~"^(residential|commercial|industrial|forest|grass|retail)$"](-23.10,-43.80,-22.75,-42.95);
+ way["leisure"="park"](-23.10,-43.80,-22.75,-42.95);
+);
+out geom qt;

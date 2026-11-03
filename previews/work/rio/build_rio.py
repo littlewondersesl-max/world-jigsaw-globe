@@ -57,10 +57,11 @@ forest=np.array([40,68,38]);forest2=np.array([58,86,44]);C[:]=forest+(forest2-fo
 C=C*(1-alt*.25)+np.array([70,84,58])*alt*.25
 C[scrub]=np.array([102,112,66])+(n2[scrub,None]-.5)*20
 C[grass]=np.array([112,134,72])+(n2[grass,None]-.5)*18
-ug=np.array([184,174,158])+(n2[...,None]-.5)*16
+ug=np.array([168,165,154])+(n2[...,None]-.5)*7
 nat=wood|scrub|grass
 urbanish=(urb|((el<40)&~nat&(slope<10)))&land
 C[urbanish]=ug[urbanish]
+n3=fbm(420,2);yard=urbanish&(n3>.58)&~air;C[yard]=np.array([110,128,82])+(n3[yard,None]-.58)*-60
 C[air&land]=np.array([168,166,156])
 rk=(rock|(slope>48))&land;C[rk]=np.array([148,138,126])+(n1[rk,None]-.5)*22
 C[beach&land]=np.array([230,212,176])
@@ -90,6 +91,10 @@ ao=np.clip(1-(nd.gaussian_filter(el,25)-el)/120,.75,1.05)
 sh=np.where(land,.72+.38*np.clip(hs,0,1),1)*np.where(land,ao,1)
 img=img*sh[...,None]*(1+(grain[...,None]-.5)*np.where(land,.06,.015)[...,None])
 Image.fromarray(np.clip(img,0,255).astype(np.uint8)).save('../../brazil-showcase/rio_c.jpg',quality=88)
+bz=nd.binary_dilation(beach&land,iterations=2)
+fo=nd.gaussian_filter((sea&nd.binary_dilation(bz,iterations=3)).astype(np.float32),1.5)
+W=np.dstack([water*255,np.clip(depth/40,0,1)*255,np.clip(fo*2,0,1)*255]).astype(np.uint8)
+Image.fromarray(W).resize((2048,TH*2048//TW),Image.BILINEAR).save('../../brazil-showcase/rio_w.png')
 # normal map (detail) from full-res DEM
 nmap=np.dstack([nx/nn*.5+.5,-ny/nn*.5+.5,1/nn*.5+.5]);nmap[water]=[.5,.5,1]
 Image.fromarray((nmap*255).astype(np.uint8)).resize((2048,TH//2),Image.LANCZOS).save('../../brazil-showcase/rio_n.jpg',quality=90)
@@ -114,12 +119,12 @@ def district(lon,lat):
 occ=np.zeros((TH//2,TW//2),bool)  # ~20m cells
 cell=MPX*2
 B=[];rr=np.random.default_rng(11)
-def put(lon,lat,ang,w,d,h,col):
+def put(lon,lat,ang,w,d,h,col,kd=0):
   x,y=P(lon,lat);i,j=int(y/2),int(x/2)
   if not(0<=i<occ.shape[0] and 0<=j<occ.shape[1]):return False
   r=max(0,int(max(w,d)/cell/2-.3))
   if occ[max(0,i-r):i+r+1,max(0,j-r):j+r+1].any():return False
-  occ[max(0,i-r):i+r+1,max(0,j-r):j+r+1]=True;B.append((lon,lat,ang,w,d,h,col));return True
+  occ[max(0,i-r):i+r+1,max(0,j-r):j+r+1]=True;B.append((lon,lat,ang,w,d,h,col,kd));return True
 def okland(lon,lat):
   i,j=tex(lon,lat);return land[i,j] and not beach[i,j] and not wood[i,j] and not grass[i,j] and not rk[i,j] and slope[i,j]<32 and not air[i,j]
 m2lon=1/(102.5e3);m2lat=1/(110.6e3)
@@ -148,7 +153,7 @@ for c,pts,br in O['roads']:
         if fv:fl=1+int(rr.random()*3.2);col=PAL_F[rr.integers(len(PAL_F))]
         elif ds and rr.random()<ds[3]*(1-ds[0]*.6):fl=int(ds[1]+rr.random()*(ds[2]-ds[1]));col=PAL_T[rr.integers(len(PAL_T))]
         else:fl=1+int(rr.random()*3);col=PAL_L[rr.integers(len(PAL_L))]
-        put(lon,lat,ang,w,d,fl*3.1,col)
+        put(lon,lat,ang,w,d,fl*3.1,col,1 if fv else (0 if fl>4 else .5))
       s+=sp
 # favela infill (dense small blocks on urban hillsides)
 FI=np.argwhere((slope[::4,::4]>12)&(slope[::4,::4]<34)&urb[::4,::4]&land[::4,::4]&(el[::4,::4]<260))
@@ -156,13 +161,13 @@ for i,j in FI:
   for t in range(2):
     y=min(i*4+rr.random()*4,TH-1);x=min(j*4+rr.random()*4,TW-1);lon=LO0+x/TW*(LO1-LO0);lat=LA1-y/TH*(LA1-LA0)
     if not land[int(y),int(x)] or wood[int(y),int(x)]:continue
-    put(lon,lat,rr.random()*.6,6+rr.random()*4,6+rr.random()*4,3.1*(1+int(rr.random()*3)),PAL_F[rr.integers(len(PAL_F))])
+    put(lon,lat,rr.random()*.6,6+rr.random()*4,6+rr.random()*4,3.1*(1+int(rr.random()*3)),PAL_F[rr.integers(len(PAL_F))],1)
 print('buildings',len(B))
 B=[b for b in B if b[5]>12 or rr.random()<.45];print('kept',len(B))
 def pack(rows,f):
   a=np.zeros((len(rows),10),np.float32)
-  for k,(lon,lat,ang,w,d,h,col) in enumerate(rows):
-    x,zz=tw(lon,lat);a[k]=[x,zz,ang,w/1e4,d/1e4,h*U,col[0]/255,col[1]/255,col[2]/255,0]
+  for k,(lon,lat,ang,w,d,h,col,kd) in enumerate(rows):
+    x,zz=tw(lon,lat);a[k]=[x,zz,ang,w/1e4,d/1e4,h*U,col[0]/255,col[1]/255,col[2]/255,kd]
   # quantise to uint16 for size
   lim=np.array([WX,HZ,2*math.pi,.01,.01,.03,1,1,1,1]);a[:,2]%=2*math.pi
   np.clip(a/lim*65535,0,65535).astype(np.uint16).tofile(f)
@@ -173,13 +178,19 @@ rr.shuffle(ti)
 for i,j in ti[:180000]:
   y=min(i*3+rr.random()*3,TH-1);x=min(j*3+rr.random()*3,TW-1);ii,jj=int(y),int(x)
   if not land[ii,jj] or rk[ii,jj] or beach[ii,jj]:continue
-  if grass[ii,jj] and rr.random()<.7:continue
+  if grass[ii,jj] and rr.random()<.35:continue
   if occ[min(ii//2,occ.shape[0]-1),min(jj//2,occ.shape[1]-1)]:continue
   g=rr.random();col=(int(34+g*30),int(62+g*34),int(30+g*16)) if not grass[ii,jj] else (70,104,52)
   T2.append((x/TW*WX,y/TH*HZ,(6+rr.random()*7)*U*1.0,col))
+YI=np.argwhere(yard[::3,::3]);rr.shuffle(YI)
+for i,j in YI[:60000]:
+  ii,jj=min(i*3+1,TH-1),min(j*3+1,TW-1)
+  if occ[min(ii//2,occ.shape[0]-1),min(jj//2,occ.shape[1]-1)]:continue
+  g=rr.random();T2.append((jj/TW*WX,ii/TH*HZ,(4+rr.random()*4)*U,(int(52+g*30),int(84+g*30),int(40+g*14))))
+print('trees',len(T2))
 a=np.array([[x,z_,s,c[0],c[1],c[2]] for x,z_,s,c in T2],np.float32)
 lim=np.array([WX,HZ,.003,255,255,255]);np.clip(a/lim*65535,0,65535).astype(np.uint16).tofile('../../brazil-showcase/rio_t.bin')
-print('trees',len(T2))
+
 # bridges (3D decks) from OSM bridge segments
 BR=[]
 for c,pts,br in O['roads']:

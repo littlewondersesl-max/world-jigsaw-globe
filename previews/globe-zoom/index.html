@@ -1,0 +1,153 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Globe Zoom – Brazil → Rio</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000;font:13px system-ui;color:#ddd}
+#ui{position:fixed;left:14px;top:12px;z-index:2;background:#0008;padding:8px 12px;border-radius:8px}
+button{background:#222;color:#ddd;border:1px solid #555;border-radius:5px;padding:4px 9px;margin:2px;cursor:pointer}button.on{background:#c9a46a;color:#111}
+a{color:#c9a46a}#fps{position:fixed;right:12px;top:10px;font:12px monospace;color:#cfc;background:#0008;padding:3px 7px;border-radius:5px}#lod{position:fixed;right:12px;top:34px;font:11px monospace;color:#ccc;background:#0008;padding:3px 7px;border-radius:5px}</style>
+<script type="importmap">{"imports":{"three":"../brazil/three.module.js"}}</script></head><body>
+<div id="ui"><b>Drag Brazil from the box onto the globe</b> (drop anywhere)<br>
+Background: <button data-b="0" class="on">Milky Way</button><button data-b="1">Nebula</button><button data-b="2">Studio</button><button data-b="3">Sunrise</button>
+<button id="reset">Reset</button> <button id="fly">Zoom to Rio</button> <button id="out">Zoom out</button><br>Scroll to zoom from the globe into Brazil and down into Rio · <a href="../brazil/">Brazil look 3</a> · <a href="../brazil-showcase/">Rio showcase</a> · <a href="../globe-reveal/">Globe reveal</a></div>
+<div id="fps"></div><div id="lod"></div><script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from '../brazil/OrbitControls.js';import {loadCity} from '../lib/city.js';import {CITIES} from '../lib/cities.js';
+const R=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});R.setPixelRatio(Math.min(2,devicePixelRatio));R.setSize(innerWidth,innerHeight);
+R.toneMapping=THREE.ACESFilmicToneMapping;document.body.appendChild(R.domElement);
+const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,.01,200);C.position.set(0,.6,6.2);
+const O=new OrbitControls(C,R.domElement);O.enableDamping=true;O.minDistance=2.2;O.maxDistance=12;
+const sun=new THREE.Vector3(-.6,.5,.65).normalize();
+S.add(new THREE.AmbientLight(0xffffff,.35));const dl=new THREE.DirectionalLight(0xfff2e0,2.2);dl.position.copy(sun).multiplyScalar(10);S.add(dl);
+const U={t:{value:0},bg:{value:0},sun:{value:sun}};
+// procedural backgrounds (all generated in-shader: no external assets)
+const NO=`float h(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float n(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z);}
+float fb(vec3 p){float a=.5,s=0.;for(int i=0;i<6;i++){s+=a*n(p);p*=2.03;a*=.5;}return s;}`;
+const bg=new THREE.Mesh(new THREE.SphereGeometry(100,64,32),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:U,
+vertexShader:`varying vec3 d;void main(){d=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+fragmentShader:NO+`uniform float bg;varying vec3 d;
+float stars(vec3 d,float s,float th){vec3 p=d*s;vec3 i=floor(p);float r=h(i);vec3 c=i+.5+.35*(vec3(h(i+3.1),h(i+7.7),h(i+1.3))-.5);float k=length(p-c);return r>th?smoothstep(.12,0.,k)*(r-th)/(1.-th):0.;}
+void main(){vec3 c;
+if(bg<.5){vec3 g=normalize(vec3(.3,1.,.2));float b=abs(dot(d,g));float band=exp(-b*b*18.);float dust=fb(d*6.);
+c=vec3(.006,.008,.016)+band*vec3(.16,.14,.12)*(.4+dust)-band*smoothstep(.55,.75,fb(d*9.+2.))*vec3(.1);
+c+=stars(d,260.,.93)*vec3(1.)+stars(d,600.,.97)*.6*(1.+band*3.);}
+else if(bg<1.5){float a=fb(d*2.5),b=fb(d*4.+5.);c=vec3(.01,.01,.02)+pow(a,3.)*vec3(.5,.12,.35)+pow(b,4.)*vec3(.1,.35,.6);c+=stars(d,300.,.95);}
+else if(bg<2.5){float y=d.y*.5+.5;c=mix(vec3(.02,.02,.025),vec3(.16,.15,.14),pow(1.-abs(d.y),3.));}
+else{float y=d.y;float s=max(dot(d,normalize(vec3(.7,.02,-.7))),0.);c=mix(vec3(.95,.55,.3),vec3(.08,.16,.35),smoothstep(-.02,.45,y));c+=pow(s,60.)*vec3(1.,.8,.5)*2.+pow(s,6.)*vec3(.5,.25,.1);if(y<0.)c=mix(vec3(.05,.05,.07),c,exp(y*30.));c+=stars(d,300.,.97)*smoothstep(.3,.8,y);}
+gl_FragColor=vec4(c,1.);}`}));S.add(bg);
+// realistic animated ocean globe (no graticule lines)
+const G=new THREE.Group();S.add(G);
+const ocean=new THREE.Mesh(new THREE.SphereGeometry(1.5,160,96),new THREE.ShaderMaterial({uniforms:U,
+vertexShader:`varying vec3 p,wn,wp;void main(){p=position;wn=normalize(mat3(modelMatrix)*normal);wp=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.);}`,
+fragmentShader:NO+`uniform float t;uniform vec3 sun;varying vec3 p,wn,wp;
+void main(){vec3 q=normalize(p);float e=.0025;vec3 a=q*40.+vec3(t*.15,0,t*.1);
+float g0=fb(a),gx=fb(a+vec3(e*40.,0,0)),gy=fb(a+vec3(0,e*40.,0)),gz=fb(a+vec3(0,0,e*40.));
+vec3 N=normalize(wn-.35*vec3(gx-g0,gy-g0,gz-g0)/ (e*40.)*.05);
+vec3 V=normalize(cameraPosition-wp);float fr=pow(1.-max(dot(N,V),0.),5.);
+float lat=abs(q.y);vec3 deep=mix(vec3(.01,.06,.13),vec3(.02,.12,.2),fb(q*5.)*.8+.1*(1.-lat));
+float dif=max(dot(N,sun),0.);vec3 H=normalize(sun+V);float sp=pow(max(dot(N,H),0.),600.)*.7+pow(max(dot(N,H),0.),40.)*.06;
+vec3 c=deep*(.25+.9*dif)+mix(vec3(0),vec3(.35,.5,.7),fr)+sp*vec3(1.,.95,.85);
+gl_FragColor=vec4(c,1.);}`}));G.add(ocean);
+const atm=new THREE.Mesh(new THREE.SphereGeometry(1.56,96,64),new THREE.ShaderMaterial({transparent:true,side:THREE.BackSide,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:U,
+vertexShader:`varying vec3 n,v;void main(){n=normalize(normalMatrix*normal);v=normalize(-(modelViewMatrix*vec4(position,1.)).xyz);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+fragmentShader:`varying vec3 n,v;void main(){float k=pow(1.-abs(dot(n,v)),5.);gl_FragColor=vec4(vec3(.3,.55,1.)*k*.7,k);}`}));G.add(atm);
+// Brazil piece: one grid, morphs between flat wood piece (in box) and spherical map patch (on globe)
+const sh=await (await fetch('../brazil/shape.json')).json();const [x0,x1,y0,y1]=sh.bbox;
+const L=new THREE.TextureLoader(),tx=n=>{const t=L.load('../brazil/'+n);t.anisotropy=8;return t};
+const map=tx('c3.jpg');map.colorSpace=THREE.SRGBColorSpace;const mask=tx('mask.png'),hgt=tx('height.png'),nrm=tx('normal.jpg');
+const FS=.85; // flat scale in box
+const PU={...U,m:{value:0},map:{value:map},mask:{value:mask},hgt:{value:hgt},nrm:{value:nrm},bb:{value:new THREE.Vector4(x0,y0,x1,y1)},fs:{value:FS},side:{value:0},cut:{value:[0,1,2,3].map(()=>new THREE.Vector4())},con:{value:[0,0,0,0]}};
+const mkMat=side=>new THREE.ShaderMaterial({uniforms:{...PU,side:{value:side}},side:THREE.DoubleSide,
+vertexShader:`uniform float m,fs,side;uniform vec4 bb;uniform sampler2D hgt;varying vec2 vu;varying vec3 wn,wp;
+void main(){vu=uv;float lon=mix(bb.x,bb.z,uv.x),lat=mix(bb.y,bb.w,uv.y);float hh=texture2D(hgt,uv).r;hh*=hh;
+float la=radians(lat),lo=radians(lon);vec3 s=vec3(cos(la)*sin(lo),sin(la),cos(la)*cos(lo));
+float th=side>.5?-.018:0.;vec3 sp=s*(1.5+.004+hh*.03*m+th*.4*(1.-m)+(side>.5?-.004*m:0.));
+vec3 fl=vec3((uv.x-.5)*(bb.z-bb.x),(uv.y-.5)*(bb.w-bb.y),0.)*fs/40.+vec3(0,0,th*.6);
+vec3 P=mix(fl,sp,m);wn=mix(vec3(0,0,1),s,m);wp=(modelMatrix*vec4(P,1.)).xyz;wn=normalize(mat3(modelMatrix)*wn);gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.);}`,
+fragmentShader:NO+`uniform vec4 bb;uniform vec4 cut[4];uniform float con[4];uniform float m,side,t;uniform vec3 sun;uniform sampler2D map,mask,nrm;varying vec2 vu;varying vec3 wn,wp;
+void main(){float a=texture2D(mask,vu).r;if(a<.5)discard;vec2 LL=vec2(mix(bb.x,bb.z,vu.x),mix(bb.y,bb.w,vu.y));for(int i=0;i<4;i++){if(con[i]>.5&&LL.x>cut[i].x&&LL.x<cut[i].z&&LL.y>cut[i].y&&LL.y<cut[i].w)discard;}
+// fine-grain oiled wood (style C): straight close grain, soft figure, warm oil sheen
+vec2 w=vu*vec2(1.,3.);float g=fb(vec3(w.x*3.,w.y*70.+fb(vec3(w*4.,1.))*3.,0.));float ring=sin((w.y*90.+fb(vec3(w*6.,2.))*6.))*.5+.5;
+vec3 wood=mix(vec3(.42,.25,.12),vec3(.62,.42,.24),g*.8+ring*.2);wood*=.9+.1*n(vec3(vu*900.,0.));
+if(side>.5)wood*=.55;
+vec3 tn=texture2D(nrm,vu).xyz*2.-1.;vec3 N=normalize(wn+tn.x*.0+vec3(0));
+vec3 mp=texture2D(map,vu).rgb;mp=pow(mp,vec3(2.2));
+float sw=vu.x*.5+(1.-vu.y)*.5;float k=side>.5?0.:smoothstep(sw-.12,sw+.12,m*1.5-.3);
+vec3 base=mix(wood,mp,k);
+vec3 V=normalize(cameraPosition-wp);vec3 H=normalize(sun+V);float dif=max(dot(N,sun),0.);
+float sp=pow(max(dot(N,H),0.),60.)*.3*(1.-k);
+vec3 c=base*(.3+.95*dif)+sp;gl_FragColor=vec4(pow(c,vec3(1./2.2)),1.);}`});
+const geo=new THREE.PlaneGeometry(1,1,260,260);
+const piece=new THREE.Group();const top=new THREE.Mesh(geo,mkMat(0)),bot=new THREE.Mesh(geo,mkMat(1));piece.add(top,bot);top.frustumCulled=bot.frustumCulled=false;
+const walls=(()=>{const v=[],sx=(x1-x0)*FS/40,sy=(y1-y0)*FS/40,z1=-.0108;for(const r of sh.rings)for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length];
+const ax=(a[0]-.5)*sx,ay=(.5-a[1])*sy,bx=(b[0]-.5)*sx,by=(.5-b[1])*sy;v.push(ax,ay,0,ax,ay,z1,bx,by,0,bx,by,0,ax,ay,z1,bx,by,z1);}
+const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.computeVertexNormals();
+const w=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0xa97c50,roughness:.75,side:THREE.DoubleSide}));w.castShadow=true;return w})();piece.add(walls);
+const mats=[top.material,bot.material];const setM=v=>{mats.forEach(q=>q.uniforms.m.value=v);walls.visible=v<.02};
+// wooden box (oiled walnut tray)
+const woodBox=new THREE.MeshStandardMaterial({color:0x5a3a22,roughness:.55});const inner=new THREE.MeshStandardMaterial({color:0x1d1712,roughness:.95});
+const box=new THREE.Group();const bw=1.0,bd=1.0;
+const fl=new THREE.Mesh(new THREE.BoxGeometry(bw,.03,bd),inner);box.add(fl);
+for(const [x,z,sx,sz] of [[0,bd/2,bw+.06,.06],[0,-bd/2,bw+.06,.06],[bw/2,0,.06,bd],[-bw/2,0,.06,bd]]){const w=new THREE.Mesh(new THREE.BoxGeometry(sx,.1,sz),woodBox);w.position.set(x,.04,z);box.add(w);}
+box.position.set(2.2,-1.05,1.6);box.rotation.set(.35,-.45,0);box.scale.setScalar(1.25);S.add(box);
+const home=()=>{box.add(piece);piece.position.set(0,.035,0);piece.rotation.set(-Math.PI/2,0,0);piece.scale.setScalar(1);setM(0);};home();
+// drag & drop
+const rc=new THREE.Raycaster(),mv=new THREE.Vector2();let drag=false,anim=null;const plane=new THREE.Plane();
+const ndc=e=>mv.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);
+R.domElement.addEventListener('pointerdown',e=>{if(anim)return;ndc(e);rc.setFromCamera(mv,C);if(rc.intersectObject(top).length&&piece.parent===box){drag=true;O.enabled=false;
+const wp=new THREE.Vector3();piece.getWorldPosition(wp);S.attach(piece);plane.setFromNormalAndCoplanarPoint(C.getWorldDirection(new THREE.Vector3()).negate(),wp);}});
+addEventListener('pointermove',e=>{if(!drag)return;ndc(e);rc.setFromCamera(mv,C);const p=new THREE.Vector3();if(rc.ray.intersectPlane(plane,p))piece.position.copy(p);});
+addEventListener('pointerup',()=>{if(!drag)return;drag=false;O.enabled=true;drop();});
+function doosh(){const A=new (window.AudioContext||window.webkitAudioContext)(),T=A.currentTime;
+const len=A.sampleRate*1.2,b=A.createBuffer(1,len,A.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+const s=A.createBufferSource();s.buffer=b;const f=A.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(2500,T);f.frequency.exponentialRampToValueAtTime(120,T+.9);
+const g=A.createGain();g.gain.setValueAtTime(.0001,T);g.gain.exponentialRampToValueAtTime(.8,T+.04);g.gain.exponentialRampToValueAtTime(.001,T+1.1);s.connect(f).connect(g).connect(A.destination);s.start();
+const o=A.createOscillator(),og=A.createGain();o.frequency.setValueAtTime(110,T);o.frequency.exponentialRampToValueAtTime(38,T+.5);og.gain.setValueAtTime(.6,T);og.gain.exponentialRampToValueAtTime(.001,T+.6);o.connect(og).connect(A.destination);o.start();o.stop(T+.7);}
+const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+function drop(){// target: globe rotation so Brazil centre faces camera; piece snaps to its true spot (1:1 globe scale)
+const lo=THREE.MathUtils.degToRad((x0+x1)/2),la=THREE.MathUtils.degToRad((y0+y1)/2);
+const tq=new THREE.Quaternion().setFromEuler(new THREE.Euler(la*.8,-lo,0,'YXZ'));
+const camDir=C.position.clone().normalize();const q0=G.quaternion.clone();
+const tq2=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo)),camDir);
+const p0=piece.position.clone(),r0=piece.quaternion.clone();const s0=piece.scale.x;const t0=performance.now();let snd=false;
+anim=now=>{let x=Math.min(1,(now-t0)/2200),e=ease(x);G.quaternion.slerpQuaternions(q0,tq2,ease(Math.min(1,x*1.6)));
+// piece flies: blend world transform to globe's frame while geometry morphs flat->sphere
+const gp=G.position,gq=G.quaternion;piece.position.lerpVectors(p0,gp,e);piece.quaternion.slerpQuaternions(r0,gq,e);piece.scale.setScalar(s0+(1-s0)*e);
+const m=Math.min(1,Math.max(0,(x-.25)/.75));setM(ease(m));if(x>.5&&!snd){snd=true;try{doosh()}catch(_){}}
+if(x>=1){G.attach(piece);anim=null;placed=true;}};}
+document.getElementById('reset').onclick=()=>{anim=null;home();placed=false;for(const c of CS)unload(c);};
+document.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{U.bg.value=+b.dataset.b;document.querySelectorAll('[data-b]').forEach(x=>x.classList.toggle('on',x===b));});
+const q=new URLSearchParams(location.search);if(q.has('bg'))U.bg.value=+q.get('bg');
+window.autodrop=()=>{S.attach(piece);drop();};window.jump=()=>{if(anim)anim(performance.now()+1e5);};
+addEventListener('resize',()=>{C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix();R.setSize(innerWidth,innerHeight);});
+// ---------- continuous zoom + city LOD streaming ----------
+let placed=false;const KM=1.5/6371;const CS=(CITIES.BR||[]).map((c,i)=>({...c,i,state:'idle',obj:null,a:0}));
+const himg=await new Promise(r=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const x=c.getContext('2d');x.drawImage(im,0,0);r({d:x.getImageData(0,0,im.width,im.height).data,w:im.width,h:im.height})};im.src='../brazil/height.png'});
+const hh=(lo,la)=>{const u=(lo-x0)/(x1-x0),v=(la-y0)/(y1-y0);const px=Math.min(himg.w-1,Math.max(0,u*himg.w|0)),py=Math.min(himg.h-1,Math.max(0,(1-v)*himg.h|0));const r=himg.d[(py*himg.w+px)*4]/255;return r*r};
+const sv=(lo,la)=>{lo=THREE.MathUtils.degToRad(lo);la=THREE.MathUtils.degToRad(la);return new THREE.Vector3(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo))};
+for(const c of CS){const up=sv(c.lon,c.lat);c.up=up;c.rad=1.5+.004+hh(c.lon,c.lat)*.03+.00004;c.pos=up.clone().multiplyScalar(c.rad);}
+async function load(c){c.state='loading';try{const o=await loadCity(c.base,c.prefix,{walls:false,shadows:false,feather:.07,edgeCull:.03,fade:true,sun});
+ if(c.state!=='loading'){o.dispose();return}const lo=THREE.MathUtils.degToRad(c.lon);const east=new THREE.Vector3(Math.cos(lo),0,-Math.sin(lo)),south=new THREE.Vector3().crossVectors(east,c.up);
+ o.root.matrixAutoUpdate=false;o.root.matrix.makeBasis(east,c.up,south).scale(new THREE.Vector3(KM*10,KM*10,KM*10)).setPosition(c.pos);G.add(o.root);
+ const[L0,L1,A0,A1]=o.meta.bbox,mx=(L1-L0)*.09,my=(A1-A0)*.09;PU.cut.value[c.i].set(L0+mx,A0+my,L1-mx,A1-my);c.obj=o;c.state='ready';}catch(e){console.error(e);c.state='idle'}}
+function unload(c){if(c.obj){c.obj.dispose();c.obj=null}PU.con.value[c.i]=0;c.state='idle'}
+const ss=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t)};const wp=new THREE.Vector3();
+function lod(){if(!placed){O.minDistance=2.2;return}O.minDistance=1.5+.004+.0012;const dist=C.position.length(),alt=dist-1.5;
+ O.rotateSpeed=Math.min(1,Math.max(.02,alt/1.2));O.zoomSpeed=Math.min(1,Math.max(.35,alt*2));
+ atm.visible=alt>.08;C.near=Math.max(alt*.15,.00004);C.far=dist+2.5;C.updateProjectionMatrix();bg.position.copy(C.position);bg.scale.setScalar(C.far*.9/100);
+ let info=[];for(const c of CS){wp.copy(c.pos).applyMatrix4(G.matrixWorld);const d=C.position.distanceTo(wp);
+  if(c.state==='idle'&&d<.16)load(c);if(c.state!=='idle'&&d>.3){unload(c)}
+  if(c.obj){const a=ss(.1,.05,d),da=ss(.04,.022,d);c.obj.setFade(a,da);c.obj.tick(performance.now()/1000);PU.con.value[c.i]=a>.55?1:0}
+  info.push(c.name+': '+c.state+' d='+d.toFixed(3))}
+ lodEl.textContent=info.join(' | ')+' alt≈'+(alt/KM).toFixed(0)+' km';}
+const lodEl=document.getElementById('lod'),fe=document.getElementById('fps');let fc=0,ft=performance.now();
+let fly=null;function flyTo(alt0,ms=3500){const c=CS[0];const p0=C.position.clone();const t0=performance.now();
+ fly=now=>{const x=Math.min(1,(now-t0)/ms),e=ease(x);wp.copy(c.up).applyQuaternion(G.quaternion).normalize();
+  const d0=p0.length(),d1=1.5+alt0;const dir=p0.clone().normalize().lerp(wp,ss(0,.6,x)).normalize();const d=Math.exp(Math.log(d0)*(1-e)+Math.log(d1)*e);C.position.copy(dir.multiplyScalar(d));if(x>=1)fly=null}}
+document.getElementById('fly').onclick=()=>{if(!placed){S.attach(piece);drop();setTimeout(()=>flyTo(.012),2400)}else flyTo(.012)};
+document.getElementById('out').onclick=()=>flyTo(4.7,3000);
+window.zoomTo=alt=>{const c=CS[0];wp.copy(c.up).applyQuaternion(G.quaternion).normalize();C.position.copy(wp.multiplyScalar(1.5+alt));O.update();};
+window.dbg={ocean,top,bot,atm,bg,C,G,piece};window.cityState=()=>CS.map(c=>c.state);window.placedNow=()=>placed;
+window.shotNow=()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL()};
+R.setAnimationLoop(now=>{U.t.value=now/1000;if(anim)anim(now);else if(piece.parent!==G&&!drag)G.rotation.y+=.0008;if(fly)fly(now);O.update();lod();R.render(S,C);
+ fc++;if(now-ft>500){fe.textContent=(fc*1000/(now-ft)).toFixed(0)+' fps';fc=0;ft=now}});
+window.ready=true;if(q.has("nobot"))bot.visible=false;if(q.has("noatm"))atm.visible=false;
+</script></body></html>
