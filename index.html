@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>"><title>World Jigsaw</title><link rel="stylesheet" href="style.css"></head><body>
+<header><h1>🌍 World Jigsaw</h1>
+<select id="set" aria-label="Piece set">
+<option value="starter">Starter (30 big countries)</option><option value="Africa">Africa</option><option value="Asia">Asia</option>
+<option value="Europe">Europe</option><option value="Americas">Americas</option><option value="Oceania">Oceania + Antarctica</option><option value="all">Whole world (175)</option></select>
+<label class="chk"><input type="checkbox" id="easy"> Easy small countries</label>
+<span id="progress">0 / 0</span><button id="mute" title="Sound on/off">🔊</button></header>
+<main>
+<section id="tray"><h2>Puzzle box</h2><div id="pieces"></div></section>
+<div id="tube" title="Flag colours collected"><div id="tubeFill"></div></div>
+<section id="stage"><canvas id="globe"></canvas>
+<div id="zoom"><button id="zin">+</button><button id="zout">−</button></div>
+<div id="msg"></div></section>
+<aside id="hints"><h2>Hints</h2><div id="sel">Tap a piece to pick it.</div>
+<div id="rot"><button id="rl" title="Turn left">⟲</button><button id="rr" title="Turn right">⟳</button></div>
+<button class="hint" id="h1">1. Which way is up?</button>
+<button class="hint" id="h2">2. Clue</button>
+<button class="hint" id="h3">3. Show me where</button>
+<div id="hintText"></div>
+<p class="tip">Drag a piece onto the globe. Turn it with ⟲ ⟳, the mouse wheel, or Q / E keys. Drag the globe to spin it.</p></aside>
+</main>
+<div id="flagPop" hidden><img id="flagImg" alt=""></div>
+<div id="card" hidden><div class="cardIn"><h2 id="cName"></h2><ul id="cFacts"></ul><button id="cOk">OK!</button></div></div>
+<script src="lib/d3.min.js"></script><script src="lib/topojson-client.min.js"></script>
+<script src="data/flags.js"></script><script src="data/facts.js"></script><script src="game.js"></script></body></html>
