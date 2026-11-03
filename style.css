@@ -27,3 +27,5 @@ select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:p
 
 #stage canvas{position:absolute;inset:0}#zoom,#msg{z-index:3}#credit{position:absolute;right:6px;bottom:4px;font:11px system-ui,sans-serif;color:#fff9;z-index:3}#credit a{color:inherit}
 body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
+
+#g3labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}#g3labels[hidden]{display:none}.g3lbl{position:absolute;left:0;top:0;font:600 11px/1 system-ui,sans-serif;color:#fff;letter-spacing:.04em;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap}

@@ -68,8 +68,15 @@ window.addEventListener('keydown',e=>{if(!sel)return;if(e.key=='q'||e.key=='Q')s
 $('rl').onclick=()=>sel&&setAngle(sel,sel.angle-15);$('rr').onclick=()=>sel&&setAngle(sel,sel.angle+15);
 function say(t,ms){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(say.t);say.t=setTimeout(()=>m.style.display='none',ms||1800);}
 function bounce(p){play('miss');if(p.el){p.el.animate([{transform:'translateX(-8px)'},{transform:'translateX(8px)'},{transform:'none'}],{duration:300});}}
+// first piece = anchor: never wrong; it straightens, resizes and flies to its real place
+let anchoring=false;async function anchor(p,x,y){if(anchoring)return;anchoring=true;const f=p.f;const sv=p.el.querySelector('svg').cloneNode(true);const fl=document.createElement('div');fl.id='flyer';fl.appendChild(sv);
+ const b=p.el.getBoundingClientRect(),w=b.width;Object.assign(fl.style,{position:'fixed',left:'0',top:'0',width:w+'px',height:w+'px',zIndex:9,pointerEvents:'none',transition:'transform .9s cubic-bezier(.6,0,.3,1),opacity .5s',transform:`translate(${x-w/2}px,${y-w/2}px) rotate(${p.angle}deg)`});
+ sv.style.transform='none';document.body.appendChild(fl);p.angle=0;say('First piece! It goes right here ✨',2500);await G3.spinTo(f.c);
+ const [tx,ty]=G3.project(f.c[0],f.c[1]);const s=Math.max(.15,Math.min(4,G3.screenRadius()*f.rad*2.2/w));fl.getBoundingClientRect();
+ fl.style.transform=`translate(${tx-w/2}px,${ty-w/2}px) rotate(0deg) scale(${s})`;await new Promise(r=>setTimeout(r,950));fl.style.opacity='0';place(p);setTimeout(()=>fl.remove(),600);anchoring=false;}
 function drop(p,x,y){const r=G3.dom.getBoundingClientRect();if(x<r.left||x>r.right||y<r.top||y>r.bottom){return;}
  const ll=G3.pick(x,y);if(!ll){bounce(p);say('Drop it on the globe!');return;}
+ if(placed.size===0){anchor(p,x,y);return;}
  const f=p.f,easy=$('easy').checked,small=f.rad<0.12;let tol=Math.max(0.09,f.rad*0.9);if(easy&&small)tol=Math.max(tol,0.25);
  const dist=d3.geoDistance(ll,f.c);if(!(dist<tol||d3.geoContains(f,ll))){bounce(p);say('Not here. Try again!');return;}
  const off=Math.min(p.angle,360-p.angle);if(off>25&&!(easy&&small)){bounce(p);say('Right place! Now turn it to fit ⟲ ⟳',2500);return;}
@@ -94,7 +101,7 @@ $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=
  $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${f[5]}`;updHints();};
 $('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c,p.f.rad<.15?3:1.4);G3.pulse(p.f,5000);$('hintText').innerHTML+='<br>✨ Look for the yellow glow!';updHints();};
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';};
-$('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);
+$('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl').onchange=e=>G3.labels(e.target.checked);
 // ---------- load ----------
 (window.G3?Promise.resolve():new Promise(r=>addEventListener('g3ready',r,{once:true}))).then(()=>fetch('data/countries-110m.json')).then(r=>r.json()).then(t=>{const geoms=t.objects.countries.geometries;
  const merge={"N. Cyprus":"Cyprus","Somaliland":"Somalia"};const groups={};geoms.forEach((g,i)=>{const n=merge[g.properties.name]||g.properties.name;(groups[n]=groups[n]||[]).push(i);});
