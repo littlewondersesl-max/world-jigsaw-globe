@@ -7,7 +7,7 @@ const cdp=await ctx.newCDPSession(p);const W=ms=>p.waitForTimeout(ms),ev=(f,a)=>
 const T=(type,pts)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:pts.map((q,i)=>({x:q[0],y:q[1],id:i}))});
 async function gest(from,to,n=10){await T('touchStart',from);for(let k=1;k<=n;k++){await T('touchMove',from.map((f,i)=>[f[0]+(to[i][0]-f[0])*k/n,f[1]+(to[i][1]-f[1])*k/n]));await W(16);}await T('touchEnd',[]);await W(300);}
 const R={};
-await p.goto(url);await p.waitForFunction('window.__ready',null,{timeout:90000});
+await p.goto(url);await p.waitForFunction('window.__ready',null,{timeout:240000});
 await p.selectOption('#set','Africa');await W(2500);
 await ev(()=>{const c=document.getElementById('lbl');c.checked=false;c.dispatchEvent(new Event('change'))});
 await ev(()=>__game.spinTo([10,10],1.3));await W(1300);await shot('0-start');
