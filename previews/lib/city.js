@@ -22,11 +22,19 @@ export async function loadCity(base,prefix,o={}){
  const tg=new THREE.PlaneGeometry(WX,HZ,GW-1,GH-1);tg.rotateX(-Math.PI/2);tg.translate(WX/2,0,HZ/2);const p=tg.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,H[i]);tg.computeVertexNormals();disp.push(tg);
  const tm=mk({map:tc,normalMap:tn,normalScale:new THREE.Vector2(.6,.6),roughness:.92,alphaMap:am});
  const terr=new THREE.Mesh(tg,tm);terr.receiveShadow=shadows;G.add(terr);
+ // optional surround: lower-res relief tile around the city, feathered into the host map
+ let sur=null;if(o.surround){try{const SM=await (await fetch(base+prefix+'smeta.json')).json();const sq=new Uint16Array(await ab(base+prefix+'sh.bin'));
+  const cl=(LO0+LO1)/2,ca=(LA0+LA1)/2,kx=Math.cos(ca*Math.PI/180)*11.132,kz=11.06,[s0,s1,a0,a1]=SM.bbox;
+  const sg=new THREE.PlaneGeometry(1,1,SM.GW-1,SM.GH-1);const sp=sg.attributes.position;
+  for(let j=0;j<SM.GH;j++)for(let i=0;i<SM.GW;i++){const k=j*SM.GW+i;const lo=s0+(i+.5)/SM.GW*(s1-s0),la=a1-(j+.5)/SM.GH*(a1-a0);
+   const x=(lo-cl)*kx,z=(ca-la)*kz;sp.setXYZ(k,x,(sq[k]/50-60)*SM.U-.00002-(x*x+z*z)/1274.2,z)}
+  sg.computeVertexNormals();disp.push(sg);const [sc,sa]=await Promise.all([ld('sc.jpg'),ld('sa.png')]);sc.colorSpace=THREE.SRGBColorSpace;sc.anisotropy=8;disp.push(sc,sa);
+  const sm=mk({map:sc,alphaMap:sa,roughness:.95});sm.alphaHash=true;sur=new THREE.Mesh(sg,sm);sur.renderOrder=-1;root.add(sur);sur.userData={bbox:SM.bbox,tex:sc}}catch(e){console.warn('surround',e)}}
  // living water: depth-graded colour, animated normals, foam only along beaches
- const WU={wt:{value:tw},t:{value:0},sun:{value:sun},fade:{value:1},fea:{value:feather}};
+ const WU={etw:{value:o.edgeTint?1:0},etc:{value:new THREE.Color(...(o.edgeTint||[0,0,0]))},wt:{value:tw},t:{value:0},sun:{value:sun},fade:{value:1},fea:{value:feather}};
  const wmat=new THREE.ShaderMaterial({uniforms:WU,transparent:true,depthWrite:false,
   vertexShader:`varying vec2 vu;varying vec3 wp,ex,ez,ey;void main(){vu=uv;wp=(modelMatrix*vec4(position,1.)).xyz;ex=normalize(mat3(modelMatrix)*vec3(1,0,0));ey=normalize(mat3(modelMatrix)*vec3(0,0,1));ez=cross(ex,ey);ez=normalize(mat3(modelMatrix)*vec3(0,1,0));gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.);}`,
-  fragmentShader:`uniform sampler2D wt;uniform float t,fade,fea;uniform vec3 sun;varying vec2 vu;varying vec3 wp,ex,ez,ey;
+  fragmentShader:`uniform sampler2D wt;uniform float t,fade,fea,etw;uniform vec3 etc;uniform vec3 sun;varying vec2 vu;varying vec3 wp,ex,ez,ey;
   float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
   void main(){vec4 w=texture2D(wt,vec2(vu.x,1.-vu.y));if(w.r<.5)discard;float d=w.g;
   vec2 P=vu*vec2(900.,580.);float e=.6;
@@ -37,7 +45,7 @@ export async function loadCity(base,prefix,o={}){
   float sp=pow(max(dot(N,Hh),0.),220.)*1.4;c=c*(.55+.5*max(dot(N,sun),0.))+fr*vec3(.25,.33,.38)+sp*vec3(1.,.95,.85);
   float fo=w.b*(.55+.45*sin(t*1.6-w.b*9.+n(P*.5)*6.))*smoothstep(.35,.75,n(P*1.3+t*.3)+w.b*.5);c=mix(c,vec3(.9,.92,.9),clamp(fo,0.,1.)*.85);
   float al=mix(.42,.9,smoothstep(0.,.35,d));al=max(al,fo);
-  float ed=min(min(vu.x,1.-vu.x),min(vu.y,1.-vu.y));if(fea>0.)al*=smoothstep(0.,fea,ed);
+  float ed=min(min(vu.x,1.-vu.x),min(vu.y,1.-vu.y));if(etw>0.){float eb=1.-smoothstep(fea*.3,fea+.08,ed);c=mix(c,etc*(.4+.9*max(dot(N,sun),0.))+sp*vec3(1.,.95,.85)+fr*vec3(.05,.08,.12),eb);al=mix(al,1.,eb);}if(fea>0.)al*=smoothstep(0.,fea,ed);
   gl_FragColor=vec4(c,al*fade);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -97,7 +105,7 @@ export async function loadCity(base,prefix,o={}){
    const cg=new THREE.CircleGeometry(.0085,32);disp.push(cg);const f=new THREE.Mesh(cg,mk({color:0x4f8a3e}));f.rotation.x=-Math.PI/2;f.scale.set(1.15,.85,1);f.position.set(x,hAt(x,z)+.0003,z);detail.add(f)}}
  const setFade=(a,dA=a)=>{for(const m of mats)m.opacity=a;WU.fade.value=a;detail.traverse(o=>{if(o.material&&o.material.alphaHash!==undefined){}});detail.visible=dA>.01;
   if(detail.visible)detail.traverse(o=>{if(o.isMesh)o.material.opacity=dA});terr.visible=wat.visible=a>.01};
- return {root,meta:M,hAt:(x,z)=>hAt(x+WX/2,z+HZ/2),ll:(lo,la)=>{const[x,z]=ll(lo,la);return[x-WX/2,z-HZ/2]},detail,
+ return {root,meta:M,tex:tc,sur,hAt:(x,z)=>hAt(x+WX/2,z+HZ/2),ll:(lo,la)=>{const[x,z]=ll(lo,la);return[x-WX/2,z-HZ/2]},detail,
   tick:t=>{WU.t.value=t},setFade,setSun:v=>WU.sun.value.copy(v),
   dispose:()=>{for(const d of disp)d.dispose&&d.dispose();root.traverse(o=>{if(o.isInstancedMesh)o.dispose()});root.removeFromParent()}};
 }
