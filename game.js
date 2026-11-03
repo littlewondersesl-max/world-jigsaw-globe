@@ -61,7 +61,7 @@ function trayScale(f){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).sc
 function buildSet(){const v=$('set').value;let names=feats.map(f=>f.name);
  if(v=='starter')names=STARTER;else if(v=='Americas')names=names.filter(n=>/America/.test(FACTS[n][0]));
  else if(v=='Oceania')names=names.filter(n=>/Oceania|Antarctica/.test(FACTS[n][0]));else if(v!='all')names=names.filter(n=>FACTS[n][0].includes(v));
- placed.clear();G3.clear();for(const q of [...parked])unpark(q);anc=null;aui.innerHTML='';hdl.style.display='none';pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
+ placed.clear();G3.clear();for(const q of [...parked])unpark(q);anc=null;aui.innerHTML='';hdl.style.display='none';G3.outline(null);pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;$('tubeFill').innerHTML='';renderTray();updHints();progress();draw();}
 function cols(n){return (FLAGS[n]||[0,['#cccccc']])[1];}
 function renderTray(){const box=$('pieces');box.innerHTML='';for(const p of pieces){if(placed.has(p.f.name)||p.parked)continue;const d=document.createElement('div');d.className='piece'+(p===sel?' sel':'');d.dataset.name=p.f.name;
@@ -77,7 +77,7 @@ function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left=(x-drag.half)+'px';gh
 function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.pointerId);drag={p,el,x:e.clientX,y:e.clientY,moved:false};
  ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);ghost.style.display='none';updateGhostShape();
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
- el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved)drop(d.p,ev.clientX,ev.clientY);};}
+ el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved&&ev.type==='pointerup')drop(d.p,ev.clientX,ev.clientY);};}
 window.addEventListener('wheel',e=>{if(drag){e.preventDefault();setAngle(drag.p,drag.p.angle+(e.deltaY>0?15:-15));}},{passive:false,capture:true});
 window.addEventListener('keydown',e=>{if(!sel)return;if(e.key=='q'||e.key=='Q')setAngle(sel,sel.angle-15);if(e.key=='e'||e.key=='E')setAngle(sel,sel.angle+15);});
 $('rl').onclick=()=>sel&&setAngle(sel,sel.angle-15);$('rr').onclick=()=>sel&&setAngle(sel,sel.angle+15);
@@ -90,35 +90,45 @@ function bounce(p){play('miss');if(p.el){p.el.animate([{transform:'translateX(-8
 // silently re-based so that longitude becomes the country's real one. Later pieces fit relative to the anchor.
 const D2R=Math.PI/180,R2D=180/Math.PI;let parked=[],anc=null;const K=100;
 const layer=document.createElement('div');layer.id='park';document.body.appendChild(layer);
+let WOOD=null;fetch('wood.jpg').then(r=>r.blob()).then(b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)})).then(u=>WOOD=u);
+let pcN=0;function pcTex(p,g){const C=1024,cid=(g.svg.match(/clipPath id="([^"]+)"/)||[])[1],svg=g.svg.replace('stroke="#2a170a"',`clip-path="url(#${cid})" stroke="#2a170a"`).replace(/^<svg /,'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ').replace(/width="[\d.]+" height="[\d.]+">/,`width="${C}" height="${C}">`)
+  .replace('<defs>',`<defs><pattern id="wood" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="${WOOD||'wood.jpg'}" width="1" height="1" preserveAspectRatio="none"/></pattern>`);
+ const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=C;c.getContext('2d').drawImage(im,0,0,C,C);if(p.ov)G3.pc.add(p.pid,c,g.r/K);};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
 function mkOverlay(p){const o=document.createElement('div');o.className='pk';const g=shapeSVG(p.f,K);o.innerHTML=g.svg;o.r=g.r;o.style.width=o.style.height=2*g.r+'px';
- o.firstChild.style.transform=`rotate(${p.angle}deg)`;layer.appendChild(o);return o;}
+ o.firstChild.style.transform=`rotate(${p.angle}deg)`;layer.appendChild(o);p.pid='pc'+(pcN++);pcTex(p,g);return o;}
 function park(p,ll,s){if(!p.parked){p.parked=true;parked.push(p);p.ov=mkOverlay(p);p.ov.addEventListener('pointerdown',e=>{if(anc&&anc.p===p)return;startDrag(e,p,p.ov)});}
  p.el=p.ov;p.lon=ll[0];p.lat=ll[1];p.s=s;renderTray();}
-function unpark(p){if(!p.parked)return;p.parked=false;parked=parked.filter(q=>q!==p);p.ov.remove();p.ov=null;}
+function unpark(p){if(!p.parked)return;p.parked=false;G3.pc.del(p.pid);parked=parked.filter(q=>q!==p);p.ov.remove();p.ov=null;}
 function boxScale(f){return trayScale(f)*86/88/Math.max(G3.screenRadius(),1);}
-function posOv(p){const o=p.ov;if(!o)return;if(!G3.facing(p.lon,p.lat)){o.style.display='none';return}o.style.display='';const [x,y]=G3.project(p.lon,p.lat);
+function posOv(p){const o=p.ov;if(!o)return;G3.pc.set(p.pid,{lon:p.lon,lat:p.lat,s:p.s,a:p.angle,op:p.op??1,vis:!(drag&&drag.p===p)});if(!G3.facing(p.lon,p.lat)){o.style.display='none';return}o.style.display='';const [x,y]=G3.project(p.lon,p.lat);
  const k=G3.screenRadius()*p.s/K;o.style.transform=`translate(${x-o.r}px,${y-o.r}px) scale(${k})`;p.sx=x;p.sy=y;p.spx=o.r*k;}
 (function loop(){if(window.G3){for(const p of parked)posOv(p);if(anc)ancUI();}requestAnimationFrame(loop);})();
 // anchor UI
 const aui=document.createElementNS('http://www.w3.org/2000/svg','svg');aui.id='aui';document.body.appendChild(aui);
 const angOff=a=>{a=((a%360)+360)%360;return a>180?a-360:a};
 function startAnchor(p,ll){park(p,ll,boxScale(p.f));anc={p,step:'blink'};sel=p;updHints();p.ov.classList.add('anc');p.ov.style.cursor='default';
- const cont=FACTS[p.f.name][0];say(`⚓ Anchor: ${p.f.name}. The world is built around it.`,2600);p.ov.firstChild.animate([{opacity:1},{opacity:.25},{opacity:1},{opacity:.25},{opacity:1}],{duration:1400});
+ const cont=FACTS[p.f.name][0];say(`⚓ Anchor: ${p.f.name}. The world is built around it.`,2600);{const t0=performance.now();(function bl(){const t=(performance.now()-t0)/1400;if(t>=1||!p.ov){p.op=1;return}p.op=.25+.75*(.5+.5*Math.cos(t*Math.PI*6));requestAnimationFrame(bl);})();}
 
  setTimeout(()=>nextStep(),1500);p.ov.addEventListener('pointerdown',ancDown);}
 function nextStep(){const p=anc.p;if(Math.abs(p.s-1)>.12){anc.step='scale';say(p.s<1?'Too small: drag the handle outward ⤢':'Too big: drag the handle inward ⤡',3500);return}p.s=1;
  if(Math.abs(angOff(p.angle))>10){anc.step='rot';say('Turn it north-up: spin it like a steering wheel ⟲ ⟳',3500);return}setAngle(p,0);
  if(anc.step!=='lat'){anc.step='lat';const d=p.f.c[0]-p.lon;G3.offsetLon(-d);for(const q of parked)q.lon=((q.lon+d+540)%360)-180;
-  say('Now slide it up or down into the outline ↕',3500);}}
+  G3.outline(p.f);say('Now slide it up or down into the outline ↕',3500);}}
 function ancDown(e){if(!anc||anc.p.ov!==e.currentTarget&&e.currentTarget!==hdl)return;e.preventDefault();e.stopPropagation();const p=anc.p,st=anc.step;if(st==='blink')return;
  const el=e.currentTarget;el.setPointerCapture(e.pointerId);const cx=p.sx,cy=p.sy,d0=Math.hypot(e.clientX-cx,e.clientY-cy)||1,s0=p.s,a0=p.angle,t0=Math.atan2(e.clientY-cy,e.clientX-cx);
- el.onpointermove=ev=>{if(st==='scale')p.s=Math.max(.05,Math.min(8,s0*Math.hypot(ev.clientX-cx,ev.clientY-cy)/d0));
+ el.onpointermove=ev=>{if(pin)return;if(st==='scale')p.s=Math.max(.05,Math.min(8,s0*Math.hypot(ev.clientX-cx,ev.clientY-cy)/d0));
   else if(st==='rot')setAngle(p,a0+(Math.atan2(ev.clientY-cy,ev.clientX-cx)-t0)*R2D);
   else if(st==='lat'){const ll=G3.pick(cx,ev.clientY);if(ll)p.lat=Math.max(-85,Math.min(85,ll[1]));}};
  el.onpointerup=el.onpointercancel=()=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;checkAnc();};}
+
+let pin=null;const TP=new Map();
+addEventListener('pointerdown',e=>{if(!anc||!['scale','rot'].includes(anc.step))return;TP.set(e.pointerId,[e.clientX,e.clientY]);if(TP.size===2){e.preventDefault();e.stopPropagation();const [a,b]=[...TP.values()];pin={d:Math.hypot(b[0]-a[0],b[1]-a[1])||1,t:Math.atan2(b[1]-a[1],b[0]-a[0]),s:anc.p.s,an:anc.p.angle};}},true);
+addEventListener('pointermove',e=>{if(!TP.has(e.pointerId))return;TP.set(e.pointerId,[e.clientX,e.clientY]);if(!pin||!anc||TP.size<2)return;e.stopPropagation();const [a,b]=[...TP.values()],p=anc.p;
+ if(anc.step==='scale')p.s=Math.max(.05,Math.min(8,pin.s*Math.hypot(b[0]-a[0],b[1]-a[1])/pin.d));else setAngle(p,pin.an+(Math.atan2(b[1]-a[1],b[0]-a[0])-pin.t)*R2D);},true);
+const tpUp=e=>{if(!TP.delete(e.pointerId))return;if(pin&&TP.size<2){pin=null;if(anc)checkAnc();}};addEventListener('pointerup',tpUp,true);addEventListener('pointercancel',tpUp,true);
 function checkAnc(){const p=anc.p;if(anc.step==='scale'&&Math.abs(p.s-1)<=.12){p.s=1;play('place');nextStep();}
  else if(anc.step==='rot'&&Math.abs(angOff(p.angle))<=10){setAngle(p,0);play('place');nextStep();}
- else if(anc.step==='lat'&&Math.abs(p.lat-p.f.c[1])<=Math.max(2,p.f.rad*R2D*.3)){const q=p;anc=null;aui.innerHTML='';hdl.style.display='none';unpark(q);place(q);}}
+ else if(anc.step==='lat'&&Math.abs(p.lat-p.f.c[1])<=Math.max(2,p.f.rad*R2D*.3)){const q=p;anc=null;aui.innerHTML='';G3.outline(null);hdl.style.display='none';unpark(q);place(q);}}
 const hdl=document.createElement('div');hdl.id='hdl';hdl.style.display='none';document.body.appendChild(hdl);hdl.addEventListener('pointerdown',ancDown);
 let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const x=p.sx,y=p.sy,R=p.spx;let h='';
  if(st==='scale'){const out=p.s<1,a=R*.75+14;for(const [dx,dy] of [[1,1],[-1,1],[1,-1],[-1,-1]]){const x1=x+dx*a*.62,y1=y+dy*a*.62,x2=x+dx*(a*.62+16),y2=y+dy*(a*.62+16);const [fx,fy,tx,ty]=out?[x1,y1,x2,y2]:[x2,y2,x1,y1];
@@ -127,7 +137,7 @@ let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const 
  if(st==='rot'){const a=R+16;const cw=angOff(p.angle)<0;for(const sd of [-1,1]){const y1=y-a*.55,y2=y+a*.55,xx=x+sd*a;
    const [ya,yb]=(sd>0)===cw?[y1,y2]:[y2,y1];h+=`<path d="M${x+sd*a*.84} ${ya} Q${xx+sd*a*.25} ${y} ${x+sd*a*.84} ${yb}" marker-end="url(#ah)"/>`;}}
  if(st==='lat'){const f=p.f;if(G3.facing(f.c[0],f.c[1])){const [ox,oy]=G3.project(f.c[0],f.c[1]);const sc=G3.screenRadius(),pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(sc).translate([ox,oy]).clipAngle(90);
-   h+=`<path class="ol" d="${d3.geoPath(pr)(f)}"/>`;const dy=oy-y;if(Math.abs(dy)>R*.5)h+=`<line x1="${x}" y1="${y+Math.sign(dy)*(R*.6)}" x2="${x}" y2="${y+Math.sign(dy)*(R*.6+22)}" marker-end="url(#ah)"/>`;}}
+   G3.outlineOp(.55+.45*Math.cos(performance.now()/160));const dy=oy-y;if(Math.abs(dy)>R*.5)h+=`<line x1="${x}" y1="${y+Math.sign(dy)*(R*.6)}" x2="${x}" y2="${y+Math.sign(dy)*(R*.6+22)}" marker-end="url(#ah)"/>`;}}
  aui.innerHTML='<defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker></defs>'+h;}
 function fits(p,ll){const f=p.f,easy=$('easy').checked,small=f.rad<0.12;let tol=Math.max(0.09,f.rad*0.9);if(easy&&small)tol=Math.max(tol,0.25);
  if(!(d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll)))return false;if(Math.abs(angOff(p.angle))>25&&!(easy&&small))return false;
@@ -171,7 +181,7 @@ $('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl'
   const b=d3.geoBounds(f);f.rad=Math.max(d3.geoDistance(f.c,b[0]),d3.geoDistance(f.c,b[1]))/1.6;if(n=="Antarctica"){f.c=[0,-90];f.rad=.5;}feats.push(f);byName[n]=f;}
  for(const n in groups){const s=new Set();groups[n].forEach(i=>nb[i].forEach(j=>{const m=merge[geoms[j].properties.name]||geoms[j].properties.name;if(m!=n)s.add(m)}));neigh[n]=[...s];}
  wtReady.then(()=>{buildSet();window.__ready=true;});});
-window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={get anc(){return anc},get parked(){return parked},get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
+window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={park:(n,lon,lat,s,a)=>{const q=pieces.find(q=>q.f.name==n);q.angle=a||0;park(q,[lon,lat],s||1)},unpark:n=>unpark(pieces.find(q=>q.f.name==n)),get anc(){return anc},get parked(){return parked},get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
 // ---- placed-countries screen: one borderless translucent panel, stacked thin tabs, pointer line to the country ----
 var scr=document.createElement('div');scr.id='scr';scr.innerHTML='<div class="sh">Placed</div><div id="scrL"></div>';$('stage').appendChild(scr);
 const ptr=document.createElementNS('http://www.w3.org/2000/svg','svg');ptr.id='ptr';ptr.innerHTML='<line/><circle r="2.5"/><text/>';document.body.appendChild(ptr);

@@ -205,7 +205,28 @@ function setBg(i){U.bg.value=i}
 const KMv=KM;function zoomRio(alt){const c=CS[0];const n=c.up.clone().applyQuaternion(G.quaternion);const T=n.clone().multiplyScalar(1.5+PU.lift.value);if(alt>=.06){O.target.set(0,0,0);C.position.copy(n.multiplyScalar(1.5+alt));C.lookAt(0,0,0);return}
  O.target.copy(T);O.minDistance=.00012;O.maxPolarAngle=1.38;C.up.copy(n);const s=new THREE.Vector3(0,-1,0).projectOnPlane(n).normalize();C.position.copy(T).addScaledVector(n,alt).addScaledVector(s,alt*.6);C.lookAt(T);O.update();}
 function project(lo,la){const v=sv(lo,la).multiplyScalar(1.5).applyMatrix4(G.matrixWorld).project(C);const r=R.domElement.getBoundingClientRect();return [r.left+(v.x+1)/2*r.width,r.top+(1-v.y)/2*r.height]}
+
+// ---- curved pieces: parked/anchor pieces are sphere patches built in the country's own orthographic frame (same lon/lat->sphere mapping as the globe),
+// so a piece with scale 1 and angle 0 at its true centre lies exactly on its painted outline. Rigid rotation on the sphere moves it elsewhere.
+const PCS={};const PR=1.5*1.002;
+function pcGeom(h,s){const N=40,pos=[],uv=[],idx=[];for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const u=-h+2*h*i/N,v=-h+2*h*j/N;let r=Math.hypot(u,v);
+  let th=Math.asin(Math.min(1,r))*s;th=Math.min(th,Math.PI*.98);const k=r>1e-9?Math.sin(th)/r:s;pos.push(u*k*PR,v*k*PR,Math.cos(th)*PR);uv.push(i/N,j/N);}
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,b,d,a,d,c);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);return g;}
+function pcAdd(id,canvas,h){pcDel(id);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;
+ const m=new THREE.Mesh(pcGeom(h,1),new THREE.MeshBasicMaterial({map:t,transparent:true,alphaTest:.02,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4}));m.renderOrder=5;
+ const hold=new THREE.Group();hold.add(m);G.add(hold);PCS[id]={hold,m,h,s:1};}
+const _e=new THREE.Vector3(),_n=new THREE.Vector3(),_u=new THREE.Vector3(),_M=new THREE.Matrix4(),_Q=new THREE.Quaternion();
+function pcSet(id,o){const P=PCS[id];if(!P)return;if(o.s!=null&&Math.abs(o.s-P.s)>1e-4){P.m.geometry.dispose();P.m.geometry=pcGeom(P.h,o.s);P.s=o.s;}
+ const lo=THREE.MathUtils.degToRad(o.lon);_n.copy(sv(o.lon,o.lat));_e.set(Math.cos(lo),0,-Math.sin(lo));_u.crossVectors(_n,_e);_M.makeBasis(_e,_u,_n);P.hold.quaternion.setFromRotationMatrix(_M);
+ P.m.rotation.z=-THREE.MathUtils.degToRad(o.a||0);if(o.op!=null)P.m.material.opacity=o.op;P.hold.visible=o.vis!==false;}
+function pcDel(id){const P=PCS[id];if(!P)return;G.remove(P.hold);P.m.geometry.dispose();P.m.material.map.dispose();P.m.material.dispose();delete PCS[id];}
+let OL=null;function outline(f){if(OL){G.remove(OL);OL.geometry.dispose();OL=null}if(!f)return;const pts=[];const geo=f.geometry;const polys=geo.type=='Polygon'?[geo.coordinates]:geo.coordinates;
+ for(const p of polys)for(const ring of p){for(let i=0;i<ring.length-1;i++){const a=ring[i],b=ring[i+1],n=Math.max(1,Math.ceil(d3.geoDistance(a,b)/0.01));const it=d3.geoInterpolate(a,b);
+  for(let k=0;k<n;k++){pts.push(sv(...it(k/n)).multiplyScalar(PR*1.001),sv(...it((k+1)/n)).multiplyScalar(PR*1.001));}}}
+ OL=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xffe7a8,transparent:true,depthWrite:false}));OL.renderOrder=6;G.add(OL);}
+function outlineOp(o){if(OL)OL.material.opacity=o}
 function offsetLon(d){G.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),THREE.MathUtils.degToRad(d)));G.updateMatrixWorld();}
 function facing(lo,la){const v=sv(lo,la).multiplyScalar(1.5).applyMatrix4(G.matrixWorld);return v.clone().normalize().dot(C.position.clone().sub(v).normalize())>.05}
-window.G3={offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},C,O};
+window.G3={pc:{add:pcAdd,set:pcSet,del:pcDel},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},C,O};
 window.dispatchEvent(new Event('g3ready'));
