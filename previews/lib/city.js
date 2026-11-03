@@ -15,7 +15,7 @@ export async function loadCity(base,prefix,o={}){
  const ll=(lo,la)=>[(lo-LO0)/(LO1-LO0)*WX,(LA1-la)/(LA1-LA0)*HZ];
  const tl=new THREE.TextureLoader();const ld=f=>new Promise(r=>tl.load(base+prefix+f,r));
  const [tc,tn,tw]=await Promise.all([ld('c.jpg'),ld('n.jpg'),ld('w.png')]);tc.colorSpace=THREE.SRGBColorSpace;tc.anisotropy=8;tw.anisotropy=4;disp.push(tc,tn,tw);
- let am=null;if(feather>0){const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');const f=feather*256;
+ let am=null;if(o.featherMap){am=await ld('fa.png');disp.push(am)}else if(feather>0){const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');const f=feather*256;
   const id=x.createImageData(256,256);for(let j=0;j<256;j++)for(let i=0;i<256;i++){const d=Math.min(i,j,255-i,255-j);const v=Math.max(0,Math.min(1,d/f));const s=v*v*(3-2*v)*255;const k=(j*256+i)*4;id.data[k]=id.data[k+1]=id.data[k+2]=s;id.data[k+3]=255}
   x.putImageData(id,0,0);am=new THREE.CanvasTexture(c);disp.push(am)}
  const mats=[];const mk=p=>{const m=new THREE.MeshStandardMaterial(p);if(feather>0||o.fade){m.alphaHash=true;m.transparent=false}mats.push(m);disp.push(m);return m};
@@ -50,7 +50,7 @@ export async function loadCity(base,prefix,o={}){
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   }`});disp.push(wmat);
- const wg=new THREE.PlaneGeometry(WX,HZ);wg.rotateX(-Math.PI/2);disp.push(wg);const wat=new THREE.Mesh(wg,wmat);wat.position.set(WX/2,.00012,HZ/2);wat.renderOrder=2;G.add(wat);
+ const wg=new THREE.PlaneGeometry(WX,HZ);wg.rotateX(-Math.PI/2);disp.push(wg);const wat=new THREE.Mesh(wg,wmat);wat.position.set(WX/2,.00012,HZ/2);wat.renderOrder=2;if(!o.noWater)G.add(wat);
  if(walls){const base=-.035,wm=mk({color:0xe9e1d2,roughness:.85,side:THREE.DoubleSide});
   const wall=pts=>{const g=new THREE.BufferGeometry(),v=[];for(let i=0;i<pts.length-1;i++){const[a,b]=[pts[i],pts[i+1]];const ha=Math.max(hAt(...a),0),hb=Math.max(hAt(...b),0);
    v.push(a[0],ha,a[1],a[0],base,a[1],b[0],hb,b[1],b[0],hb,b[1],a[0],base,a[1],b[0],base,b[1]);}g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.computeVertexNormals();disp.push(g);G.add(new THREE.Mesh(g,wm))};

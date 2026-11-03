@@ -54,16 +54,18 @@ const sh=await (await fetch('../brazil/shape.json')).json();const [x0,x1,y0,y1]=
 const L=new THREE.TextureLoader(),tx=n=>{const t=L.load('../brazil/'+n);t.anisotropy=8;return t};
 const map=tx('c3.jpg');map.colorSpace=THREE.SRGBColorSpace;const mask=tx('mask.png'),hgt=tx('height.png'),nrm=tx('normal.jpg');
 const FS=.85; // flat scale in box
-const PU={...U,m:{value:0},map:{value:map},mask:{value:mask},hgt:{value:hgt},nrm:{value:nrm},bb:{value:new THREE.Vector4(x0,y0,x1,y1)},fs:{value:FS},side:{value:0},cut:{value:[0,1,2,3].map(()=>new THREE.Vector4())},con:{value:[0,0,0,0]},vex:{value:.03},ct:{value:[0,1,2,3].map(()=>null)},cb:{value:[0,1,2,3].map(()=>new THREE.Vector4(0,0,1,1))},cw:{value:[0,0,0,0]},cg:{value:[0,1,2,3].map(()=>new THREE.Vector3(1,1,1))}};
+const PU={...U,m:{value:0},map:{value:map},mask:{value:mask},hgt:{value:hgt},nrm:{value:nrm},bb:{value:new THREE.Vector4(x0,y0,x1,y1)},fs:{value:FS},side:{value:0},cut:{value:[0,1,2,3].map(()=>new THREE.Vector4())},con:{value:[0,0,0,0]},vex:{value:.03},lift:{value:.004},ct:{value:[0,1,2,3].map(()=>null)},cb:{value:[0,1,2,3].map(()=>new THREE.Vector4(0,0,1,1))},cw:{value:[0,0,0,0]},cg:{value:[0,1,2,3].map(()=>new THREE.Vector3(1,1,1))}};
 const mkMat=side=>new THREE.ShaderMaterial({uniforms:{...PU,side:{value:side}},side:THREE.DoubleSide,
-vertexShader:`uniform float m,fs,side,vex;uniform vec4 bb;uniform sampler2D hgt;varying vec2 vu;varying vec3 wn,wp;
+vertexShader:`uniform float m,fs,side,vex,lift;uniform vec4 bb;uniform sampler2D hgt;varying vec2 vu;varying vec3 wn,wp;
 void main(){vu=uv;float lon=mix(bb.x,bb.z,uv.x),lat=mix(bb.y,bb.w,uv.y);float hh=texture2D(hgt,uv).r;hh*=hh;
 float la=radians(lat),lo=radians(lon);vec3 s=vec3(cos(la)*sin(lo),sin(la),cos(la)*cos(lo));
-float th=side>.5?-.018:0.;vec3 sp=s*(1.5+.004+hh*vex*m+th*.4*(1.-m)+(side>.5?-.004*m:0.));
+float th=side>.5?-.018:0.;vec3 sp=s*(1.5+mix(.004,lift,m)+hh*vex*m+th*.4*(1.-m)+(side>.5?-.004*m:0.));
 vec3 fl=vec3((uv.x-.5)*(bb.z-bb.x),(uv.y-.5)*(bb.w-bb.y),0.)*fs/40.+vec3(0,0,th*.6);
 vec3 P=mix(fl,sp,m);wn=mix(vec3(0,0,1),s,m);wp=(modelMatrix*vec4(P,1.)).xyz;wn=normalize(mat3(modelMatrix)*wn);gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.);}`,
 fragmentShader:NO+`uniform vec4 bb;uniform vec4 cut[4];uniform float con[4];uniform sampler2D ct[4];uniform vec4 cb[4];uniform float cw[4];uniform vec3 cg[4];uniform float m,side,t;uniform vec3 sun;uniform sampler2D map,mask,nrm;varying vec2 vu;varying vec3 wn,wp;
-void main(){float a=texture2D(mask,vu).r;if(a<.5)discard;vec2 LL=vec2(mix(bb.x,bb.z,vu.x),mix(bb.y,bb.w,vu.y));for(int i=0;i<4;i++){if(con[i]>.5&&LL.x>cut[i].x&&LL.x<cut[i].z&&LL.y>cut[i].y&&LL.y<cut[i].w)discard;}
+float nz(vec2 p){return .5*sin(p.x*7.1+p.y*3.3)+.3*sin(-p.x*4.3+p.y*9.7+1.3)+.2*sin(p.x*13.+p.y*11.+2.);}
+float ell(vec2 L,vec4 b,float k){vec2 c=(b.xy+b.zw)*.5,h=(b.zw-b.xy)*.5;return length((L-c)/h)+k*nz(L);}
+void main(){float a=texture2D(mask,vu).r;if(a<.5)discard;vec2 LL=vec2(mix(bb.x,bb.z,vu.x),mix(bb.y,bb.w,vu.y));for(int i=0;i<4;i++){if(con[i]>.5&&ell(LL,cut[i],.12)<.48)discard;}
 // fine-grain oiled wood (style C): straight close grain, soft figure, warm oil sheen
 vec2 w=vu*vec2(1.,3.);float g=fb(vec3(w.x*3.,w.y*70.+fb(vec3(w*4.,1.))*3.,0.));float ring=sin((w.y*90.+fb(vec3(w*6.,2.))*6.))*.5+.5;
 vec3 wood=mix(vec3(.42,.25,.12),vec3(.62,.42,.24),g*.8+ring*.2);wood*=.9+.1*n(vec3(vu*900.,0.));
@@ -71,9 +73,9 @@ if(side>.5)wood*=.55;
 vec3 tn=texture2D(nrm,vu).xyz*2.-1.;vec3 N=normalize(wn+tn.x*.0+vec3(0));
 vec3 mp=texture2D(map,vu).rgb;mp=pow(mp,vec3(2.2));
 #pragma unroll_loop_start
-for(int i=0;i<4;i++){if(cw[i]>0.){vec2 cu=(LL-cb[i].xy)/(cb[i].zw-cb[i].xy);float dd=min(min(cu.x,cu.y),min(1.-cu.x,1.-cu.y));
- if(dd>0.){vec3 cc=pow(texture2D(ct[i],cu).rgb,vec3(2.2))*cg[i];mp=mix(mp,cc,smoothstep(0.,.15,dd)*cw[i]);}
- else{float nd=smoothstep(-.6,0.,dd)*cw[i];mp*=mix(1.,.82+.36*n(vec3(LL*260.,0.))*n(vec3(LL*41.,3.)),nd*.6);mp=mix(mp,mp*cg[i],nd*.5);}}}
+for(int i=0;i<4;i++){if(cw[i]>0.){float e=ell(LL,cb[i],.12);vec2 cu=(LL-cb[i].xy)/(cb[i].zw-cb[i].xy);
+ if(e<1.){vec3 cc=pow(texture2D(ct[i],cu).rgb,vec3(2.2));mp=mix(mp,cc,(1.-smoothstep(.45,1.,e))*cw[i]);}
+ float nd=(1.-smoothstep(.8,1.8,e))*cw[i];mp*=mix(1.,.86+.28*n(vec3(LL*260.,0.))*n(vec3(LL*41.,3.)),nd*.5);}}
 #pragma unroll_loop_end
 float sw=vu.x*.5+(1.-vu.y)*.5;float k=side>.5?0.:smoothstep(sw-.12,sw+.12,m*1.5-.3);
 vec3 base=mix(wood,mp,k);
@@ -117,7 +119,7 @@ anim=now=>{let x=Math.min(1,(now-t0)/2200),e=ease(x);G.quaternion.slerpQuaternio
 // piece flies: blend world transform to globe's frame while geometry morphs flat->sphere
 const gp=G.position,gq=G.quaternion;piece.position.lerpVectors(p0,gp,e);piece.quaternion.slerpQuaternions(r0,gq,e);piece.scale.setScalar(s0+(1-s0)*e);
 const m=Math.min(1,Math.max(0,(x-.25)/.75));setM(ease(m));if(x>.5&&!snd){snd=true;try{doosh()}catch(_){}}
-if(x>=1){G.attach(piece);anim=null;placed=true;}};}
+if(x>=1){G.attach(piece);anim=null;placed=true;bot.visible=false;}};}
 document.getElementById('reset').onclick=()=>{anim=null;home();placed=false;for(const c of CS)unload(c);};
 document.querySelectorAll('[data-b]').forEach(b=>b.onclick=()=>{U.bg.value=+b.dataset.b;document.querySelectorAll('[data-b]').forEach(x=>x.classList.toggle('on',x===b));});
 const q=new URLSearchParams(location.search);if(q.has('bg'))U.bg.value=+q.get('bg');
@@ -129,25 +131,26 @@ const himg=await new Promise(r=>{const im=new Image();im.onload=()=>{const c=doc
 const hh=(lo,la)=>{const u=(lo-x0)/(x1-x0),v=(la-y0)/(y1-y0);const px=Math.min(himg.w-1,Math.max(0,u*himg.w|0)),py=Math.min(himg.h-1,Math.max(0,(1-v)*himg.h|0));const r=himg.d[(py*himg.w+px)*4]/255;return r*r};
 const sv=(lo,la)=>{lo=THREE.MathUtils.degToRad(lo);la=THREE.MathUtils.degToRad(la);return new THREE.Vector3(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo))};
 for(const c of CS){const up=sv(c.lon,c.lat);c.up=up;c.rad=1.5+.004+.00004;c.pos=up.clone().multiplyScalar(c.rad);}
-async function load(c){c.state='loading';try{const o=await loadCity(c.base,c.prefix,{walls:false,shadows:false,feather:.2,edgeCull:.06,fade:true,sun,surround:true,edgeTint:[.003,.012,.03]});
+async function load(c){c.state='loading';try{const o=await loadCity(c.base,c.prefix,{walls:false,shadows:false,edgeCull:.06,fade:true,sun,surround:true,featherMap:true,noWater:true});
  if(c.state!=='loading'){o.dispose();return}const lo=THREE.MathUtils.degToRad(c.lon);const east=new THREE.Vector3(Math.cos(lo),0,-Math.sin(lo)),south=new THREE.Vector3().crossVectors(east,c.up);
  o.root.matrixAutoUpdate=false;o.root.matrix.makeBasis(east,c.up,south).scale(new THREE.Vector3(KM*10,KM*10,KM*10)).setPosition(c.pos);G.add(o.root);
- const sb=o.sur?o.sur.userData:{bbox:o.meta.bbox,tex:o.tex},fr=o.sur?.24:.09;const[L0,L1,A0,A1]=sb.bbox,mx=(L1-L0)*fr,my=(A1-A0)*fr;PU.cut.value[c.i].set(L0+mx,A0+my,L1-mx,A1-my);PU.ct.value[c.i]=sb.tex;PU.cb.value[c.i].set(L0,A0,L1,A1);c.obj=o;c.state='ready';}catch(e){console.error(e);c.state='idle'}}
+ const sb=o.sur?o.sur.userData:{bbox:o.meta.bbox,tex:o.tex},fr=o.sur?.24:.09;const[L0,L1,A0,A1]=sb.bbox,mx=(L1-L0)*fr,my=(A1-A0)*fr;PU.cut.value[c.i].set(L0,A0,L1,A1);PU.ct.value[c.i]=sb.tex;PU.cb.value[c.i].set(L0,A0,L1,A1);c.obj=o;c.state='ready';}catch(e){console.error(e);c.state='idle'}}
 function unload(c){PU.cw.value[c.i]=0;PU.ct.value[c.i]=null;if(c.obj){c.obj.dispose();c.obj=null}PU.con.value[c.i]=0;c.state='idle'}
 const TG=new THREE.Vector3(),UP=new THREE.Vector3(),YY=new THREE.Vector3(0,1,0),VD=new THREE.Vector3();
-function tilt(alt){const k=ss(.06,.02,alt);C.getWorldDirection(VD);const o=C.position,b=o.dot(VD),r=1.504,cc=o.lengthSq()-r*r,disc=b*b-cc;
+function tilt(alt){const k=ss(.06,.02,alt);C.getWorldDirection(VD);const o=C.position,b=o.dot(VD),r=1.5+PU.lift.value+.000005,cc=o.lengthSq()-r*r,disc=b*b-cc;
  let P;if(disc>0)P=o.clone().addScaledVector(VD,-b-Math.sqrt(disc));else P=o.clone().normalize().multiplyScalar(r);
  TG.set(0,0,0).lerp(P,k);O.target.copy(TG);UP.copy(YY).lerp(P.clone().normalize(),k).normalize();C.up.copy(UP);
  O._quat.setFromUnitVectors(C.up,YY);O._quatInverse.copy(O._quat).invert();
- O.minDistance=1.5055*(1-k)+.0009*k;O.maxPolarAngle=Math.PI-(Math.PI-1.38)*k;if(k>0)O.rotateSpeed=O.rotateSpeed*(1-k)+.5*k;}
+ O.minDistance=1.5055*(1-k)+.00012*k;O.maxPolarAngle=Math.PI-(Math.PI-1.38)*k;if(k>0)O.rotateSpeed=O.rotateSpeed*(1-k)+.5*k;}
 window.tiltBy=a=>{const ax=new THREE.Vector3().crossVectors(C.up,C.position.clone().sub(O.target)).normalize();const v=C.position.clone().sub(O.target).applyAxisAngle(ax,a);C.position.copy(O.target).add(v);C.lookAt(O.target);O.update();};
 const ss=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t)};const wp=new THREE.Vector3();
-function lod(){if(!placed){O.minDistance=2.2;return}O.minDistance=1.5+.004+.0012;const dist=C.position.length(),alt=dist-1.5;
+const FR=new THREE.Frustum(),PM=new THREE.Matrix4();
+function lod(){C.updateMatrixWorld();FR.setFromProjectionMatrix(PM.multiplyMatrices(C.projectionMatrix,C.matrixWorldInverse));if(!placed){O.minDistance=2.2;return}const dist=C.position.length(),alt=dist-1.5;
  O.rotateSpeed=Math.min(1,Math.max(.02,alt/1.2));O.zoomSpeed=Math.min(1,Math.max(.35,alt*2));
- atm.visible=alt>.08;PU.vex.value=.03+(.00113-.03)*ss(.25,.04,alt);tilt(alt);C.near=Math.max(alt*.15,.00004);C.far=dist+2.5;C.updateProjectionMatrix();bg.position.copy(C.position);bg.scale.setScalar(C.far*.9/100);
+ atm.visible=alt>.08;PU.vex.value=.03+(.00113-.03)*ss(.25,.04,alt);tilt(alt);C.near=Math.max(alt*.3,.00003);const hz=Math.sqrt(Math.max(dist*dist-2.25,0));C.far=Math.min(dist+2.5,hz*1.3+.02);PU.lift.value=.00002+.00398*ss(.25,1.,alt);for(const c of CS){c.pos.copy(c.up).multiplyScalar(1.5+PU.lift.value+.00003);if(c.obj)c.obj.root.matrix.setPosition(c.pos);}C.updateProjectionMatrix();bg.position.copy(C.position);bg.scale.setScalar(C.far*.9/100);
  let info=[];for(const c of CS){wp.copy(c.pos).applyMatrix4(G.matrixWorld);const d=C.position.distanceTo(wp);
   if(c.state==='idle'&&d<.16)load(c);if(c.state!=='idle'&&d>.3){unload(c)}
-  if(c.obj){const a=ss(.1,.05,d),da=ss(.04,.022,d);c.obj.setFade(a,da);c.obj.tick(performance.now()/1000);PU.con.value[c.i]=a>.55?1:0;PU.cw.value[c.i]=ss(.16,.09,d)}
+  if(c.obj){const a=ss(.1,.05,d),da=ss(.04,.022,d);c.obj.setFade(a,da);/* activity gate: animate/detail only when region is in view and close */const inV=FR.intersectsSphere(new THREE.Sphere(wp.clone(),.03));c.active=inV&&d<.05;if(c.obj.root)c.obj.root.visible=inV||d<.02;if(c.active)c.obj.tick(performance.now()/1000);PU.con.value[c.i]=a>.55?1:0;PU.cw.value[c.i]=ss(.16,.09,d)}
   info.push(c.name+': '+c.state+' d='+d.toFixed(3))}
  lodEl.textContent=info.join(' | ')+' alt≈'+(alt/KM).toFixed(0)+' km';}
 const lodEl=document.getElementById('lod'),fe=document.getElementById('fps');let fc=0,ft=performance.now();
@@ -156,7 +159,7 @@ let fly=null;function flyTo(alt0,ms=3500){const c=CS[0];const p0=C.position.clon
   const d0=p0.length(),d1=1.5+alt0;const dir=p0.clone().normalize().lerp(wp,ss(0,.6,x)).normalize();const d=Math.exp(Math.log(d0)*(1-e)+Math.log(d1)*e);C.position.copy(dir.multiplyScalar(d));if(x>=1)fly=null}}
 document.getElementById('fly').onclick=()=>{if(!placed){S.attach(piece);drop();setTimeout(()=>flyTo(.012),2400)}else flyTo(.012)};
 document.getElementById('out').onclick=()=>flyTo(4.7,3000);
-window.zoomTo=alt=>{const c=CS[0];wp.copy(c.up).applyQuaternion(G.quaternion).normalize();C.position.copy(wp.multiplyScalar(1.5+alt));O.update();};
+window.zoomTo=alt=>{const c=CS[0];wp.copy(c.up).applyQuaternion(G.quaternion).normalize();const n=wp.clone();C.position.copy(n.clone().multiplyScalar(1.5+alt));if(alt<.06){const T=n.clone().multiplyScalar(1.5+PU.lift.value);O.target.copy(T);O.minDistance=.00012;O.maxPolarAngle=1.38;C.up.copy(n);const s=new THREE.Vector3(0,-1,0).projectOnPlane(n).normalize();C.position.copy(T).addScaledVector(n,alt).addScaledVector(s,alt*.02);C.lookAt(T);}O.update();};
 window.dbg={ocean,top,bot,atm,bg,C,G,piece};window.cityState=()=>CS.map(c=>c.state);window.placedNow=()=>placed;
 window.shotNow=()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL()};
 R.setAnimationLoop(now=>{U.t.value=now/1000;if(anim)anim(now);else if(piece.parent!==G&&!drag)G.rotation.y+=.0008;if(fly)fly(now);O.update();lod();R.render(S,C);
