@@ -60,7 +60,7 @@ def ell(LON,LAT,b,k):cx,cy=(b[0]+b[1])/2,(b[2]+b[3])/2;hx,hy=(b[1]-b[0])/2,(b[3]
 SB=[LO0,LO1,LA0,LA1];CB=[C0,C1,A0,A1]
 AW=2048;AH=int(AW*TH/TW);LON,LAT=grid(AW,AH)
 cityA=1-ss(.6,.95,ell(LON,LAT,CB,.1))
-la=cv2.resize(land.astype(np.float32),(AW,AH),interpolation=cv2.INTER_AREA)
+land2=land&~((cls==0)|((cls==80)&(el<6)));la=cv2.resize(nd.binary_erosion(land2,iterations=1).astype(np.float32),(AW,AH),interpolation=cv2.INTER_AREA)
 al=(1-ss(.5,.97,ell(LON,LAT,SB,.12)))*(1-cityA)*ss(.6,.9,la)
 Image.fromarray((np.clip(al,0,1)*255).astype(np.uint8)).save('../../brazil-showcase/rio_sa.png')
 # city feather map over city bbox (+ land only, so tile water never renders)
