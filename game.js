@@ -56,7 +56,7 @@ function shapeSVG(f,scale,cls){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.
  return {svg:`<svg class="pc ${cls||''}" viewBox="${-r} ${-r} ${2*r} ${2*r}" width="${2*r}" height="${2*r}"><defs><clipPath id="${id}"><path d="${d}"/></clipPath></defs>
 <g clip-path="url(#${id})"><path d="${d}" fill="url(#wood)"/><image href="${F.url}" x="${ix}" y="${iy}" width="${iw}" height="${ih}" preserveAspectRatio="none" opacity=".9"/>
 <rect x="${-r}" y="${-r}" width="${2*r}" height="${2*r}" fill="url(#wood)" opacity=".22" style="mix-blend-mode:multiply"/></g>
-<path d="${d}" fill="none" stroke="url(#wood)" stroke-width="${rim*2}" clip-path="url(#${id})"/><path d="${d}" fill="none" stroke="#2a170a" stroke-width="${rim*.55}"/></svg>`,r};}
+<path d="${d}" fill="none" stroke="url(#wood)" stroke-width="${rim*1.2}" stroke-opacity=".7" clip-path="url(#${id})"/><path d="${d}" fill="none" stroke="#2a170a" stroke-opacity=".45" stroke-width="${rim*.3}"/></svg>`,r};}
 function trayScale(f){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(1).translate([0,0]),b=d3.geoPath(pr).bounds(f);const m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1]);return 80/m;}
 function buildSet(){const v=$('set').value;let names=feats.map(f=>f.name);
  if(v=='starter')names=STARTER;else if(v=='Americas')names=names.filter(n=>/America/.test(FACTS[n][0]));
@@ -97,7 +97,7 @@ function drop(p,x,y){const r=G3.dom.getBoundingClientRect();if(x<r.left||x>r.rig
  const off=Math.min(p.angle,360-p.angle);if(off>25&&!(easy&&small)){bounce(p);say('Right place! Now turn it to fit ⟲ ⟳',2500);return;}
  place(p);}
 function place(p){placed.add(p.f.name);G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);}
-function progress(){$('progress').textContent=`${placed.size} / ${pieces.length}`;}
+function progress(){updScreen();$('progress').textContent=`${placed.size} / ${pieces.length}`;}
 // flag + tube
 function celebrate(n){const fl=FLAGS[n];const pop=$('flagPop');if(!fl){showCard(n);return;}$('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
  const cs=cols(n);let i=0;setTimeout(function next(){if(i>=cs.length){pop.hidden=true;showCard(n);return;}flyStripe(cs[i++]);setTimeout(next,450);},700);}
@@ -127,4 +127,19 @@ $('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl'
  for(const n in groups){const s=new Set();groups[n].forEach(i=>nb[i].forEach(j=>{const m=merge[geoms[j].properties.name]||geoms[j].properties.name;if(m!=n)s.add(m)}));neigh[n]=[...s];}
  wtReady.then(()=>{buildSet();window.__ready=true;});});
 window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
+// ---- placed-countries screen: one borderless translucent panel, stacked thin tabs, pointer line to the country ----
+var scr=document.createElement('div');scr.id='scr';scr.innerHTML='<div class="sh">Placed</div><div id="scrL"></div>';$('stage').appendChild(scr);
+const ptr=document.createElementNS('http://www.w3.org/2000/svg','svg');ptr.id='ptr';ptr.innerHTML='<line/><circle r="2.5"/><text/>';document.body.appendChild(ptr);
+let hot=null,hotRaf=0;
+function updScreen(){if(typeof scr==='undefined')return;const L=$('scrL');L.innerHTML='';scr.style.display=placed.size?'':'none';
+ for(const n of [...placed].reverse()){const t=document.createElement('div');t.className='tab'+(n===hot?' on':'');t.textContent=n;t.dataset.n=n;t.onmouseenter=()=>setHot(n);t.onmouseleave=()=>setHot(null);L.appendChild(t);}}
+function setHot(n){if(n===hot)return;hot=n;for(const t of $('scrL').children)t.classList.toggle('on',t.dataset.n===n);
+ if(n){const t=[...$('scrL').children].find(t=>t.dataset.n===n);t&&t.scrollIntoView({block:'nearest'});}
+ for(const e of document.querySelectorAll('.g3lbl'))e.style.visibility=e.textContent===n?'hidden':'';cancelAnimationFrame(hotRaf);if(n)drawPtr();else ptr.style.display='none';}
+function drawPtr(){const f=byName[hot];if(!f)return;const c=d3.geoCentroid(f);
+ if(!G3.facing(c[0],c[1])){ptr.style.display='none'}else{const [x,y]=G3.project(c[0],c[1]);const ty=y-46;ptr.style.display='block';
+  const [l,ci,tx]=ptr.children;l.setAttribute('x1',x);l.setAttribute('y1',y);l.setAttribute('x2',x);l.setAttribute('y2',ty+4);ci.setAttribute('cx',x);ci.setAttribute('cy',y);tx.setAttribute('x',x);tx.setAttribute('y',ty);tx.textContent=hot;}
+ hotRaf=requestAnimationFrame(drawPtr);}
+(function hook(){if(!window.G3)return setTimeout(hook,200);G3.dom.addEventListener('pointermove',e=>{if(e.buttons||!placed.size)return;const ll=G3.pick(e.clientX,e.clientY);let n=null;  if(ll)for(const k of placed)if(d3.geoContains(byName[k],ll)){n=k;break}setHot(n);}); G3.dom.addEventListener('pointerleave',()=>setHot(null)); })();
+window.__game.hot=setHot;
 })();

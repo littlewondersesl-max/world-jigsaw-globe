@@ -31,3 +31,12 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #g3labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}#g3labels[hidden]{display:none}.g3lbl{position:absolute;left:0;top:0;font:600 11px/1 system-ui,sans-serif;color:#fff;letter-spacing:.04em;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap}
 
 #flyer svg{filter:drop-shadow(0 6px 8px #000c);width:100%;height:100%}
+
+#scr{position:absolute;right:12px;bottom:34px;width:150px;max-height:190px;display:flex;flex-direction:column;background:rgba(12,20,32,.42);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:8px;padding:6px 4px 6px 6px;z-index:6;box-shadow:0 4px 18px #0005;font:500 11px/1 system-ui,sans-serif;color:#d8e4f0}
+#scr .sh{font-size:9px;letter-spacing:.18em;text-transform:uppercase;opacity:.55;padding:0 4px 5px}
+#scrL{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#ffffff30 transparent}
+#scr .tab{padding:4px 6px;margin-bottom:1px;border-radius:3px;background:rgba(255,255,255,.04);cursor:default;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .15s,color .15s}
+#scr .tab:hover,#scr .tab.on{background:rgba(160,200,255,.16);color:#fff}
+#ptr{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:7;display:none;overflow:visible}
+#ptr line{stroke:#e8f2ffcc;stroke-width:.8}#ptr circle{fill:#fff;stroke:#0008;stroke-width:.6}
+#ptr text{fill:#fff;font:600 12px system-ui,sans-serif;letter-spacing:.04em;text-anchor:middle;paint-order:stroke;stroke:#0009;stroke-width:3px}

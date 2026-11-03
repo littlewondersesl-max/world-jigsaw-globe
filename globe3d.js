@@ -68,7 +68,7 @@ function paint(ctx,w,h,f,cont,glow){const pr=eq(w,h),gp=d3.geoPath(pr,ctx);const
  // soft stylised relief speckle (deterministic) for a Civ-like painted look
  const n=Math.min(4000,((b[1][0]-b[0][0])*(b[1][1]-b[0][1])/(w>3000?90:40))|0);let s=f.name.length*977;const rnd=()=>(s=(s*16807)%2147483647)/2147483647;
  for(let i=0;i<n;i++){const x=b[0][0]+rnd()*(b[1][0]-b[0][0]),y=b[0][1]+rnd()*(b[1][1]-b[0][1]);ctx.fillStyle=rnd()<.5?'rgba(255,250,220,.04)':'rgba(30,40,10,.05)';ctx.beginPath();ctx.arc(x,y,1+rnd()*3*(w/4096),0,7);ctx.fill();}
- ctx.restore();ctx.beginPath();gp(f);ctx.lineWidth=w/4096*1.6;ctx.strokeStyle='rgba(40,30,15,.75)';ctx.stroke();ctx.lineWidth=w/4096*.6;ctx.strokeStyle='rgba(255,240,200,.35)';ctx.stroke();}
+ ctx.restore();ctx.beginPath();gp(f);ctx.lineWidth=w/4096*.5;ctx.strokeStyle='rgba(40,30,15,.16)';ctx.stroke();}
 const sv=(lo,la)=>{lo=THREE.MathUtils.degToRad(lo);la=THREE.MathUtils.degToRad(la);return new THREE.Vector3(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo))};
 // three SphereGeometry: x=-cos(phi)sin(theta)... u=0 maps to lon -180 with our sv() convention? check: geometry x=-cos(u*2pi)*sin(v), z=sin(u*2pi)*sin(v)
 // our sv: lon=0 -> +z. In SphereGeometry +z at u=.25 -> lon(u)=(u-.25)*360 => rotate land so u=.5 is lon 0: rotation.y=-PI/2
@@ -118,9 +118,19 @@ const sapatch=new THREE.Mesh(new THREE.PlaneGeometry(1,1,500,760),smat);sapatch.
 const saId=n=>SAN.indexOf(n)+1;
 const LBL=await (await fetch(SAP+'labels.json')).json();const lblBox=document.createElement('div');lblBox.id='g3labels';host.appendChild(lblBox);
 for(const l of LBL){l.el=document.createElement('div');l.el.className='g3lbl';l.el.textContent=l.n;lblBox.appendChild(l.el);l.v=sv(l.lon,l.lat).multiplyScalar(1.51);}
-const LW=new THREE.Vector3();function labels(){if(lblBox.hidden)return;const r=R.domElement.getBoundingClientRect(),hr=host.getBoundingClientRect();for(const l of LBL){LW.copy(l.v).applyMatrix4(G.matrixWorld);
- const vis=LW.clone().normalize().dot(C.position.clone().sub(LW).normalize())>.05;const p=LW.project(C);l.el.style.display=vis&&p.z<1?'':'none';
- l.el.style.transform=`translate(${r.left-hr.left+(p.x+1)/2*r.width}px,${r.top-hr.top+(1-p.y)/2*r.height}px) translate(-50%,-50%)`;}}
+// label width budget: approx on-screen E-W extent of each country (km) at its label point; text never wider than its country
+const AREA={Brazil:8.5,Argentina:2.78,Peru:1.29,Colombia:1.14,Bolivia:1.1,Venezuela:.92,Chile:.76,Paraguay:.41,Ecuador:.28,Guyana:.21,Uruguay:.18,Suriname:.16,"Fr. Guiana":.08,"Falkland Is.":.012};
+const WKM={Brazil:3000,Argentina:1050,Peru:1000,Colombia:1000,Bolivia:950,Venezuela:1100,Chile:260,Paraguay:600,Ecuador:550,Guyana:380,Uruguay:430,Suriname:360,"Fr. Guiana":230,"Falkland Is.":220};
+LBL.sort((a,b)=>(AREA[b.n]||0)-(AREA[a.n]||0));
+const LW=new THREE.Vector3();function labels(){if(lblBox.hidden)return;const r=R.domElement.getBoundingClientRect(),hr=host.getBoundingClientRect();
+ const ppu=r.height/2/Math.tan(C.fov*Math.PI/360)/Math.max(.02,C.position.length()-1.5);const boxes=[];
+ for(const l of LBL){LW.copy(l.v).applyMatrix4(G.matrixWorld);
+ const vis=LW.clone().normalize().dot(C.position.clone().sub(LW).normalize())>.05;const p=LW.project(C);
+ const cpx=(WKM[l.n]||200)/6371*1.5*ppu*.85,fs=Math.min(22,cpx/(l.n.length*.62));
+ const x=r.left-hr.left+(p.x+1)/2*r.width,y=r.top-hr.top+(1-p.y)/2*r.height,w=l.n.length*fs*.62+4,h=fs+3;
+ let ok=vis&&p.z<1&&fs>=8;if(ok)for(const b of boxes)if(Math.abs(b[0]-x)*2<b[2]+w&&Math.abs(b[1]-y)*2<b[3]+h){ok=false;break}
+ if(ok)boxes.push([x,y,w,h]);l.el.style.display=ok?'':'none';l.el.style.fontSize=fs.toFixed(1)+'px';
+ l.el.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;}}
 // ---- city streaming (LOD + activity gating) ----
 const KM=1.5/6371;let brPlaced=false;const CS=(CITIES.BR||[]).map((c,i)=>({...c,base:c.base.replace('../','previews/'),i,state:'idle',obj:null}));
 for(const c of CS){c.up=sv(c.lon,c.lat);c.pos=c.up.clone().multiplyScalar(1.5+.004+.00004);}
@@ -195,5 +205,6 @@ function setBg(i){U.bg.value=i}
 const KMv=KM;function zoomRio(alt){const c=CS[0];const n=c.up.clone().applyQuaternion(G.quaternion);const T=n.clone().multiplyScalar(1.5+PU.lift.value);if(alt>=.06){O.target.set(0,0,0);C.position.copy(n.multiplyScalar(1.5+alt));C.lookAt(0,0,0);return}
  O.target.copy(T);O.minDistance=.00012;O.maxPolarAngle=1.38;C.up.copy(n);const s=new THREE.Vector3(0,-1,0).projectOnPlane(n).normalize();C.position.copy(T).addScaledVector(n,alt).addScaledVector(s,alt*.6);C.lookAt(T);O.update();}
 function project(lo,la){const v=sv(lo,la).multiplyScalar(1.5).applyMatrix4(G.matrixWorld).project(C);const r=R.domElement.getBoundingClientRect();return [r.left+(v.x+1)/2*r.width,r.top+(1-v.y)/2*r.height]}
-window.G3={labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},C,O};
+function facing(lo,la){const v=sv(lo,la).multiplyScalar(1.5).applyMatrix4(G.matrixWorld);return v.clone().normalize().dot(C.position.clone().sub(v).normalize())>.05}
+window.G3={facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},C,O};
 window.dispatchEvent(new Event('g3ready'));
