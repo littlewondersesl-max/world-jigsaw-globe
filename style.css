@@ -4,13 +4,13 @@ select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:p
 .chk{font-size:14px}main{flex:1;display:flex;min-height:0}
 #tray{width:230px;background:linear-gradient(#2a1a0f,#1d130b);border-right:6px solid #3a2414;box-shadow:inset 0 0 30px #000a;overflow-y:auto;padding:6px}#tray h2,#hints h2{margin:4px;font-size:16px}
 #pieces{display:grid;grid-template-columns:1fr 1fr;gap:6px}.piece{background:radial-gradient(#3b2616,#24170d);box-shadow:inset 0 2px 6px #000c;border-radius:10px;height:96px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:grab}
-.piece.sel{outline:4px solid #ffd34d}.piece svg{width:86px;height:86px;pointer-events:none;transition:transform .25s}.piece path{fill:url(#wood);stroke:#2a170a;stroke-width:1.2}.piece svg{filter:drop-shadow(0 2px 2px #000c) drop-shadow(0 -1px 0 #e8c08a55)}
+.piece.sel{outline:4px solid #ffd34d}.piece svg{width:86px;height:86px;pointer-events:none;transition:transform .25s}.piece svg{filter:drop-shadow(0 2px 2px #000c) drop-shadow(0 -1px 0 #e8c08a55)}
 #stage{flex:1;position:relative;min-width:0}canvas{width:100%;height:100%;display:block;touch-action:none}
 #zoom{position:absolute;left:10px;bottom:10px;display:flex;flex-direction:column;gap:6px}#zoom button{width:46px;height:46px;font-size:26px;font-weight:bold}
 #msg{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#fff;color:#222;padding:6px 14px;border-radius:12px;font-weight:bold;display:none}
 #hints{width:230px;background:#1b3d6b;padding:8px;overflow-y:auto}#sel{min-height:40px;margin:6px 0}.hint{display:block;width:100%;margin:6px 0;background:#ffd34d;font-weight:bold}.hint:disabled{opacity:.4}
 #rot{display:flex;gap:8px}#rot button{flex:1;font-size:28px;padding:4px}#hintText{background:#0d2240;border-radius:8px;padding:6px;min-height:60px;font-size:15px}.tip{font-size:13px;opacity:.8}
-#ghost{position:fixed;pointer-events:none;z-index:9;opacity:.85}#ghost path{fill:url(#wood);stroke:#2a170a;stroke-width:1.2}#ghost svg{filter:drop-shadow(0 6px 8px #000c)}
+#ghost{position:fixed;pointer-events:none;z-index:9;opacity:.85}#ghost svg{filter:drop-shadow(0 6px 8px #000c)}
 #card{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:20}.cardIn{background:#fffbe9;color:#222;border-radius:18px;padding:18px 24px;max-width:420px;border:6px solid #ffd34d}
 .cardIn h2{margin:0 0 8px}.cardIn li{margin:6px 0;font-size:18px}#cOk{background:#2a9d4b;color:#fff;font-size:20px;width:100%}
 @media(max-width:800px){main{flex-direction:column}#tray{width:auto;height:120px;border-right:0}#pieces{display:flex;overflow-x:auto}.piece{min-width:90px}#hints{width:auto;height:150px}#stage{min-height:0}.tip{display:none}}
@@ -29,3 +29,5 @@ select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:p
 body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 
 #g3labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}#g3labels[hidden]{display:none}.g3lbl{position:absolute;left:0;top:0;font:600 11px/1 system-ui,sans-serif;color:#fff;letter-spacing:.04em;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap}
+
+#flyer svg{filter:drop-shadow(0 6px 8px #000c);width:100%;height:100%}

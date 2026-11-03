@@ -25,7 +25,7 @@ else if(false){float y=d.y;float s=max(dot(d,normalize(vec3(.7,.02,-.7))),0.);c=
 c+=stars(d,420.,.985)*.5;
 // distant solar system: faint orbit rings in a plane through the sun, planets as small discs
 vec3 sp=sun*60.,nn=normalize(vec3(.15,1.,.25));float t=dot(sp,nn)/dot(d,nn);
-if(t>0.){vec3 X=d*t-sp;float rho=length(X);for(int i=0;i<6;i++){float ring=1.-smoothstep(0.,.05+.004*t/60.,abs(rho-po[i]));c+=ring*vec3(.25,.3,.4)*.18;}}
+if(t>0.){vec3 X=d*t-sp;float rho=length(X);for(int i=0;i<6;i++){float ring=1.-smoothstep(0.,.05+.004*t/60.,abs(rho-po[i]));c+=ring*vec3(.3,.36,.48)*.32;}}
 for(int i=0;i<6;i++){float a=acos(clamp(dot(d,normalize(pl[i])),-1.,1.));c+=smoothstep(.0035,.0015,a)*vec3(.9,.8,.7)*.9+smoothstep(.02,0.,a)*.04;}
 float sa=acos(clamp(dot(d,sun),-1.,1.));c+=smoothstep(.03,.022,sa)*vec3(4.,3.6,3.)+vec3(1.,.8,.55)*(.35*exp(-sa*18.)+.08*exp(-sa*4.));
 gl_FragColor=vec4(c,1.);}`}));S.add(bg);
@@ -61,12 +61,13 @@ gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a);}`}));land.renderOrder=1;G.add(land
 // three.js sphere uv: u=0 at lon=-180 (x=-1?) -> equirect: u=(lon+180)/360, v=(lat+90)/180 flipped for canvas
 const eq=(w,h)=>d3.geoEquirectangular().scale(w/(2*Math.PI)).translate([w/2,h/2]).precision(.1);
 const PAL={"Africa":["#c9a86a","#a3925a"],"Asia":["#a9a46e","#8f9a62"],"Europe":["#7f9a5e","#6d8a52"],"North America":["#8ea062","#7b9156"],"South America":["#6f9a55","#5f8a4a"],"Oceania":["#c7a26a","#b49460"],"Antarctica":["#eef2f4","#dde5ea"],"Europe/Asia":["#8f9c62","#7f8e58"]};
+const WTI=new Image();WTI.src='pieces_world.jpg';await WTI.decode().catch(()=>{});
 function paint(ctx,w,h,f,cont,glow){const pr=eq(w,h),gp=d3.geoPath(pr,ctx);const pal=PAL[cont]||["#9a9a70","#888"];
  ctx.save();ctx.beginPath();gp(f);ctx.clip();const b=gp.bounds(f);
- const g=ctx.createLinearGradient(0,b[0][1],0,b[1][1]);g.addColorStop(0,pal[0]);g.addColorStop(1,pal[1]);ctx.fillStyle=g;ctx.fillRect(b[0][0]-2,b[0][1]-2,b[1][0]-b[0][0]+4,b[1][1]-b[0][1]+4);
+ const g=ctx.createLinearGradient(0,b[0][1],0,b[1][1]);g.addColorStop(0,pal[0]);g.addColorStop(1,pal[1]);ctx.fillStyle=g;ctx.fillRect(b[0][0]-2,b[0][1]-2,b[1][0]-b[0][0]+4,b[1][1]-b[0][1]+4);if(WTI.complete&&WTI.naturalWidth)ctx.drawImage(WTI,0,0,w,h);
  // soft stylised relief speckle (deterministic) for a Civ-like painted look
  const n=Math.min(4000,((b[1][0]-b[0][0])*(b[1][1]-b[0][1])/(w>3000?90:40))|0);let s=f.name.length*977;const rnd=()=>(s=(s*16807)%2147483647)/2147483647;
- for(let i=0;i<n;i++){const x=b[0][0]+rnd()*(b[1][0]-b[0][0]),y=b[0][1]+rnd()*(b[1][1]-b[0][1]);ctx.fillStyle=rnd()<.5?'rgba(255,250,220,.08)':'rgba(30,40,10,.09)';ctx.beginPath();ctx.arc(x,y,1+rnd()*3*(w/4096),0,7);ctx.fill();}
+ for(let i=0;i<n;i++){const x=b[0][0]+rnd()*(b[1][0]-b[0][0]),y=b[0][1]+rnd()*(b[1][1]-b[0][1]);ctx.fillStyle=rnd()<.5?'rgba(255,250,220,.04)':'rgba(30,40,10,.05)';ctx.beginPath();ctx.arc(x,y,1+rnd()*3*(w/4096),0,7);ctx.fill();}
  ctx.restore();ctx.beginPath();gp(f);ctx.lineWidth=w/4096*1.6;ctx.strokeStyle='rgba(40,30,15,.75)';ctx.stroke();ctx.lineWidth=w/4096*.6;ctx.strokeStyle='rgba(255,240,200,.35)';ctx.stroke();}
 const sv=(lo,la)=>{lo=THREE.MathUtils.degToRad(lo);la=THREE.MathUtils.degToRad(la);return new THREE.Vector3(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo))};
 // three SphereGeometry: x=-cos(phi)sin(theta)... u=0 maps to lon -180 with our sv() convention? check: geometry x=-cos(u*2pi)*sin(v), z=sin(u*2pi)*sin(v)
