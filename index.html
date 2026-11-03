@@ -1,18 +1,20 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>"><title>World Jigsaw</title><link rel="stylesheet" href="style.css"></head><body>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>"><title>World Jigsaw</title><link rel="stylesheet" href="style.css"><script type="importmap">{"imports":{"three":"./previews/brazil/three.module.js"}}</script></head><body>
 <header><h1>🌍 World Jigsaw</h1>
 <select id="set" aria-label="Piece set">
 <option value="starter">Starter (30 big countries)</option><option value="Africa">Africa</option><option value="Asia">Asia</option>
 <option value="Europe">Europe</option><option value="Americas">Americas</option><option value="Oceania">Oceania + Antarctica</option><option value="all">Whole world (175)</option></select>
 <label class="chk"><input type="checkbox" id="easy"> Easy small countries</label>
+<select id="bg" aria-label="Background"><option value="0">Milky Way</option><option value="1">Nebula</option><option value="2">Studio</option><option value="3">Sunrise</option></select>
 <span id="progress">0 / 0</span><button id="mute" title="Sound on/off">🔊</button></header>
 <main>
+<svg width="0" height="0" style="position:absolute"><defs><pattern id="wood" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="wood.jpg" width="1" height="1" preserveAspectRatio="none"/></pattern></defs></svg>
 <section id="tray"><h2>Puzzle box</h2><div id="pieces"></div></section>
 <div id="tube" title="Flag colours collected"><div id="tubeFill"></div></div>
-<section id="stage"><canvas id="globe"></canvas>
+<section id="stage">
 <div id="zoom"><button id="zin">+</button><button id="zout">−</button></div>
-<div id="msg"></div></section>
+<div id="msg"></div><div id="credit">Brazil map: ESA WorldCover 2021 (CC BY 4.0) · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Mapzen Terrain Tiles · Natural Earth · <a href="v1/">Classic version</a></div></section>
 <aside id="hints"><h2>Hints</h2><div id="sel">Tap a piece to pick it.</div>
 <div id="rot"><button id="rl" title="Turn left">⟲</button><button id="rr" title="Turn right">⟳</button></div>
 <button class="hint" id="h1">1. Which way is up?</button>
@@ -24,4 +26,4 @@
 <div id="flagPop" hidden><img id="flagImg" alt=""></div>
 <div id="card" hidden><div class="cardIn"><h2 id="cName"></h2><ul id="cFacts"></ul><button id="cOk">OK!</button></div></div>
 <script src="lib/d3.min.js"></script><script src="lib/topojson-client.min.js"></script>
-<script src="data/flags.js"></script><script src="data/facts.js"></script><script src="game.js"></script></body></html>
+<script src="data/flags.js"></script><script src="data/facts.js"></script><script type="module" src="globe3d.js"></script><script src="game.js"></script></body></html>

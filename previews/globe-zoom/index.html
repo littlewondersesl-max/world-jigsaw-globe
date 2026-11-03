@@ -100,8 +100,11 @@ const home=()=>{box.add(piece);piece.position.set(0,.035,0);piece.rotation.set(-
 const rc=new THREE.Raycaster(),mv=new THREE.Vector2();let drag=false,anim=null;const plane=new THREE.Plane();
 const ndc=e=>mv.set(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);
 R.domElement.addEventListener('pointerdown',e=>{if(anim)return;ndc(e);rc.setFromCamera(mv,C);if(rc.intersectObject(top).length&&piece.parent===box){drag=true;O.enabled=false;
-const wp=new THREE.Vector3();piece.getWorldPosition(wp);S.attach(piece);plane.setFromNormalAndCoplanarPoint(C.getWorldDirection(new THREE.Vector3()).negate(),wp);}});
-addEventListener('pointermove',e=>{if(!drag)return;ndc(e);rc.setFromCamera(mv,C);const p=new THREE.Vector3();if(rc.ray.intersectPlane(plane,p))piece.position.copy(p);});
+const wp=new THREE.Vector3();piece.getWorldPosition(wp);S.attach(piece);piece.position.copy(wp);faceCam();plane.setFromNormalAndCoplanarPoint(C.getWorldDirection(new THREE.Vector3()).negate(),wp);}});
+addEventListener('wheel',e=>{if(drag){e.preventDefault();e.stopImmediatePropagation();roll+=e.deltaY>0?.26:-.26;faceCam();}},{passive:false,capture:true});
+addEventListener('pointermove',e=>{if(!drag)return;ndc(e);rc.setFromCamera(mv,C);const p=new THREE.Vector3();if(rc.ray.intersectPlane(plane,p))piece.position.copy(p);faceCam();});
+// picked-up piece is always screen-aligned (full face to camera); only in-plane roll allowed
+let roll=0;function faceCam(){piece.quaternion.copy(C.quaternion).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),roll));}
 addEventListener('pointerup',()=>{if(!drag)return;drag=false;O.enabled=true;drop();});
 function doosh(){const A=new (window.AudioContext||window.webkitAudioContext)(),T=A.currentTime;
 const len=A.sampleRate*1.2,b=A.createBuffer(1,len,A.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
@@ -117,7 +120,7 @@ const tq2=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(Math.cos(l
 const p0=piece.position.clone(),r0=piece.quaternion.clone();const s0=piece.scale.x;const t0=performance.now();let snd=false;
 anim=now=>{let x=Math.min(1,(now-t0)/2200),e=ease(x);G.quaternion.slerpQuaternions(q0,tq2,ease(Math.min(1,x*1.6)));
 // piece flies: blend world transform to globe's frame while geometry morphs flat->sphere
-const gp=G.position,gq=G.quaternion;piece.position.lerpVectors(p0,gp,e);piece.quaternion.slerpQuaternions(r0,gq,e);piece.scale.setScalar(s0+(1-s0)*e);
+const gp=G.position,gq=G.quaternion;piece.position.lerpVectors(p0,gp,e).addScaledVector(camDir,.5*(1-e));/* stay in front of the globe until it conforms */piece.quaternion.slerpQuaternions(r0,gq,e);piece.scale.setScalar(s0+(1-s0)*e);
 const m=Math.min(1,Math.max(0,(x-.25)/.75));setM(ease(m));if(x>.5&&!snd){snd=true;try{doosh()}catch(_){}}
 if(x>=1){G.attach(piece);anim=null;placed=true;bot.visible=false;}};}
 document.getElementById('reset').onclick=()=>{anim=null;home();placed=false;for(const c of CS)unload(c);};

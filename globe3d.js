@@ -1,0 +1,152 @@
+// Three.js ocean globe for the main game. Countries appear only once placed.
+// Brazil gets the detailed "look 3" map + streamed Rio region/city (LOD + activity gating); others a stylised texture.
+import * as THREE from 'three';
+import {OrbitControls} from './previews/brazil/OrbitControls.js';import {loadCity} from './previews/lib/city.js';import {CITIES} from './previews/lib/cities.js';
+const P='previews/brazil/';
+const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});R.setPixelRatio(Math.min(2,devicePixelRatio));
+R.toneMapping=THREE.ACESFilmicToneMapping;R.domElement.id='globe';host.prepend(R.domElement);
+const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(40,1,.01,200);C.position.set(0,.6,6.2);
+const O=new OrbitControls(C,R.domElement);O.enableDamping=true;O.enablePan=false;O.minDistance=2.2;O.maxDistance=12;
+const sun=new THREE.Vector3(-.6,.5,.65).normalize();S.add(new THREE.AmbientLight(0xffffff,.35));const dl=new THREE.DirectionalLight(0xfff2e0,2.2);dl.position.copy(sun).multiplyScalar(10);S.add(dl);
+const U={t:{value:0},bg:{value:0},sun:{value:sun}};
+const NO=`float h(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float n(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z);}
+float fb(vec3 p){float a=.5,s=0.;for(int i=0;i<6;i++){s+=a*n(p);p*=2.03;a*=.5;}return s;}`;
+const bg=new THREE.Mesh(new THREE.SphereGeometry(100,64,32),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:U,
+vertexShader:`varying vec3 d;void main(){d=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+fragmentShader:NO+`uniform float bg;varying vec3 d;
+float stars(vec3 d,float s,float th){vec3 p=d*s;vec3 i=floor(p);float r=h(i);vec3 c=i+.5+.35*(vec3(h(i+3.1),h(i+7.7),h(i+1.3))-.5);float k=length(p-c);return r>th?smoothstep(.12,0.,k)*(r-th)/(1.-th):0.;}
+void main(){vec3 c;
+if(bg<.5){vec3 g=normalize(vec3(.3,1.,.2));float b=abs(dot(d,g));float band=exp(-b*b*18.);float dust=fb(d*6.);
+c=vec3(.006,.008,.016)+band*vec3(.16,.14,.12)*(.4+dust)-band*smoothstep(.55,.75,fb(d*9.+2.))*vec3(.1);c+=stars(d,260.,.93)*vec3(1.)+stars(d,600.,.97)*.6*(1.+band*3.);}
+else if(bg<1.5){float a=fb(d*2.5),b=fb(d*4.+5.);c=vec3(.01,.01,.02)+pow(a,3.)*vec3(.5,.12,.35)+pow(b,4.)*vec3(.1,.35,.6);c+=stars(d,300.,.95);}
+else if(bg<2.5){c=mix(vec3(.02,.02,.025),vec3(.16,.15,.14),pow(1.-abs(d.y),3.));}
+else{float y=d.y;float s=max(dot(d,normalize(vec3(.7,.02,-.7))),0.);c=mix(vec3(.95,.55,.3),vec3(.08,.16,.35),smoothstep(-.02,.45,y));c+=pow(s,60.)*vec3(1.,.8,.5)*2.+pow(s,6.)*vec3(.5,.25,.1);if(y<0.)c=mix(vec3(.05,.05,.07),c,exp(y*30.));c+=stars(d,300.,.97)*smoothstep(.3,.8,y);}
+gl_FragColor=vec4(c,1.);}`}));S.add(bg);
+const G=new THREE.Group();S.add(G);
+const ocean=new THREE.Mesh(new THREE.SphereGeometry(1.5,160,96),new THREE.ShaderMaterial({uniforms:U,
+vertexShader:`varying vec3 p,wn,wp;void main(){p=position;wn=normalize(mat3(modelMatrix)*normal);wp=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.);}`,
+fragmentShader:NO+`uniform float t;uniform vec3 sun;varying vec3 p,wn,wp;
+void main(){vec3 q=normalize(p);float e=.0025;vec3 a=q*40.+vec3(t*.15,0,t*.1);
+float g0=fb(a),gx=fb(a+vec3(e*40.,0,0)),gy=fb(a+vec3(0,e*40.,0)),gz=fb(a+vec3(0,0,e*40.));
+vec3 N=normalize(wn-.35*vec3(gx-g0,gy-g0,gz-g0)/(e*40.)*.05);vec3 V=normalize(cameraPosition-wp);float fr=pow(1.-max(dot(N,V),0.),5.);
+float lat=abs(q.y);vec3 deep=mix(vec3(.01,.06,.13),vec3(.02,.12,.2),fb(q*5.)*.8+.1*(1.-lat));
+float dif=max(dot(N,sun),0.);vec3 H=normalize(sun+V);float sp=pow(max(dot(N,H),0.),600.)*.7+pow(max(dot(N,H),0.),40.)*.06;
+gl_FragColor=vec4(deep*(.25+.9*dif)+mix(vec3(0),vec3(.35,.5,.7),fr)+sp*vec3(1.,.95,.85),1.);}`}));G.add(ocean);
+const atm=new THREE.Mesh(new THREE.SphereGeometry(1.56,96,64),new THREE.ShaderMaterial({transparent:true,side:THREE.BackSide,depthWrite:false,blending:THREE.AdditiveBlending,
+vertexShader:`varying vec3 n,v;void main(){n=normalize(normalMatrix*normal);v=normalize(-(modelViewMatrix*vec4(position,1.)).xyz);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+fragmentShader:`varying vec3 n,v;void main(){float k=pow(1.-abs(dot(n,v)),5.);gl_FragColor=vec4(vec3(.3,.55,1.)*k*.7,k);}`}));G.add(atm);
+// ---- stylised country layer: equirectangular canvases (base = placed, fresh = revealing / hint glow) ----
+const TW=4096,TH=2048;const mkC=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
+const baseC=mkC(TW,TH),freshC=mkC(2048,1024);const bctx=baseC.getContext('2d'),fctx=freshC.getContext('2d');
+const baseT=new THREE.CanvasTexture(baseC),freshT=new THREE.CanvasTexture(freshC);for(const t of [baseT,freshT]){t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;}
+const LU={...U,bt:{value:baseT},ft:{value:freshT},rc:{value:new THREE.Vector3(0,0,1)},rv:{value:2},pm:{value:0},pa:{value:0}};
+const land=new THREE.Mesh(new THREE.SphereGeometry(1.5006,256,128),new THREE.ShaderMaterial({uniforms:LU,transparent:true,depthWrite:false,
+vertexShader:`varying vec2 vu;varying vec3 q,wn;void main(){vu=uv;q=normalize(position);wn=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+fragmentShader:NO+`uniform sampler2D bt,ft;uniform vec3 rc,sun;uniform float rv,pm,pa;varying vec2 vu;varying vec3 q,wn;
+void main(){vec4 b=texture2D(bt,vu),f=texture2D(ft,vu);float d=acos(clamp(dot(q,rc),-1.,1.));
+float w=pm>.5?pa:smoothstep(rv,rv-.04,d);vec3 fc=pm>.5?vec3(1.,.9,.2):f.rgb;float fa=f.a*w;
+vec4 c=vec4(mix(b.rgb,fc,fa/max(b.a+fa-b.a*fa,1e-3)),b.a+fa-b.a*fa);if(c.a<.02)discard;
+float dif=max(dot(wn,sun),0.);vec3 col=pow(c.rgb,vec3(2.2))*(.32+.9*dif);
+if(pm<.5){float edge=smoothstep(rv-.04,rv,d)*smoothstep(rv+.02,rv-.01,d)*f.a;col+=vec3(1.,.85,.5)*edge*1.5;}
+gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a);}`}));land.renderOrder=1;G.add(land);
+// three.js sphere uv: u=0 at lon=-180 (x=-1?) -> equirect: u=(lon+180)/360, v=(lat+90)/180 flipped for canvas
+const eq=(w,h)=>d3.geoEquirectangular().scale(w/(2*Math.PI)).translate([w/2,h/2]).precision(.1);
+const PAL={"Africa":["#c9a86a","#a3925a"],"Asia":["#a9a46e","#8f9a62"],"Europe":["#7f9a5e","#6d8a52"],"North America":["#8ea062","#7b9156"],"South America":["#6f9a55","#5f8a4a"],"Oceania":["#c7a26a","#b49460"],"Antarctica":["#eef2f4","#dde5ea"],"Europe/Asia":["#8f9c62","#7f8e58"]};
+function paint(ctx,w,h,f,cont,glow){const pr=eq(w,h),gp=d3.geoPath(pr,ctx);const pal=PAL[cont]||["#9a9a70","#888"];
+ ctx.save();ctx.beginPath();gp(f);ctx.clip();const b=gp.bounds(f);
+ const g=ctx.createLinearGradient(0,b[0][1],0,b[1][1]);g.addColorStop(0,pal[0]);g.addColorStop(1,pal[1]);ctx.fillStyle=g;ctx.fillRect(b[0][0]-2,b[0][1]-2,b[1][0]-b[0][0]+4,b[1][1]-b[0][1]+4);
+ // soft stylised relief speckle (deterministic) for a Civ-like painted look
+ const n=Math.min(4000,((b[1][0]-b[0][0])*(b[1][1]-b[0][1])/(w>3000?90:40))|0);let s=f.name.length*977;const rnd=()=>(s=(s*16807)%2147483647)/2147483647;
+ for(let i=0;i<n;i++){const x=b[0][0]+rnd()*(b[1][0]-b[0][0]),y=b[0][1]+rnd()*(b[1][1]-b[0][1]);ctx.fillStyle=rnd()<.5?'rgba(255,250,220,.08)':'rgba(30,40,10,.09)';ctx.beginPath();ctx.arc(x,y,1+rnd()*3*(w/4096),0,7);ctx.fill();}
+ ctx.restore();ctx.beginPath();gp(f);ctx.lineWidth=w/4096*1.6;ctx.strokeStyle='rgba(40,30,15,.75)';ctx.stroke();ctx.lineWidth=w/4096*.6;ctx.strokeStyle='rgba(255,240,200,.35)';ctx.stroke();}
+const sv=(lo,la)=>{lo=THREE.MathUtils.degToRad(lo);la=THREE.MathUtils.degToRad(la);return new THREE.Vector3(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo))};
+// three SphereGeometry: x=-cos(phi)sin(theta)... u=0 maps to lon -180 with our sv() convention? check: geometry x=-cos(u*2pi)*sin(v), z=sin(u*2pi)*sin(v)
+// our sv: lon=0 -> +z. In SphereGeometry +z at u=.25 -> lon(u)=(u-.25)*360 => rotate land so u=.5 is lon 0: rotation.y=-PI/2
+land.rotation.y=-Math.PI/2;
+// ---- Brazil detailed patch (look 3) ----
+const sh=await (await fetch(P+'shape.json')).json();const [x0,x1,y0,y1]=sh.bbox;
+const L=new THREE.TextureLoader(),tx=n=>{const t=L.load(P+n);t.anisotropy=8;return t};
+const map=tx('c3.jpg');map.colorSpace=THREE.SRGBColorSpace;const mask=tx('mask.png'),hgt=tx('height.png');
+const PU={...U,map:{value:map},mask:{value:mask},hgt:{value:hgt},bb:{value:new THREE.Vector4(x0,y0,x1,y1)},vex:{value:.03},lift:{value:.004},rv:{value:0},
+ cut:{value:[0,1,2,3].map(()=>new THREE.Vector4())},con:{value:[0,0,0,0]},ct:{value:[0,1,2,3].map(()=>null)},cb:{value:[0,1,2,3].map(()=>new THREE.Vector4(0,0,1,1))},cw:{value:[0,0,0,0]}};
+const bmat=new THREE.ShaderMaterial({uniforms:PU,
+vertexShader:`uniform float vex,lift;uniform vec4 bb;uniform sampler2D hgt;varying vec2 vu;varying vec3 wn;
+void main(){vu=uv;float lon=mix(bb.x,bb.z,uv.x),lat=mix(bb.y,bb.w,uv.y);float hh=texture2D(hgt,uv).r;hh*=hh;float la=radians(lat),lo=radians(lon);
+vec3 s=vec3(cos(la)*sin(lo),sin(la),cos(la)*cos(lo));wn=normalize(mat3(modelMatrix)*s);gl_Position=projectionMatrix*modelViewMatrix*vec4(s*(1.5+lift+hh*vex),1.);}`,
+fragmentShader:NO+`uniform vec4 bb;uniform vec4 cut[4];uniform float con[4];uniform sampler2D ct[4];uniform vec4 cb[4];uniform float cw[4];uniform float rv;uniform vec3 sun;uniform sampler2D map,mask;varying vec2 vu;varying vec3 wn;
+float nz(vec2 p){return .5*sin(p.x*7.1+p.y*3.3)+.3*sin(-p.x*4.3+p.y*9.7+1.3)+.2*sin(p.x*13.+p.y*11.+2.);}
+float ell(vec2 L,vec4 b,float k){vec2 c=(b.xy+b.zw)*.5,h=(b.zw-b.xy)*.5;return length((L-c)/h)+k*nz(L);}
+void main(){if(texture2D(mask,vu).r<.5)discard;float rd=length(vu-.5)*1.42;if(rd>rv)discard;vec2 LL=vec2(mix(bb.x,bb.z,vu.x),mix(bb.y,bb.w,vu.y));for(int i=0;i<4;i++){if(con[i]>.5&&ell(LL,cut[i],.12)<.48)discard;}
+vec3 mp=pow(texture2D(map,vu).rgb,vec3(2.2));
+#pragma unroll_loop_start
+for(int i=0;i<4;i++){if(cw[i]>0.){float e=ell(LL,cb[i],.12);vec2 cu=(LL-cb[i].xy)/(cb[i].zw-cb[i].xy);
+ if(e<1.){vec3 cc=pow(texture2D(ct[i],cu).rgb,vec3(2.2));mp=mix(mp,cc,(1.-smoothstep(.45,1.,e))*cw[i]);}
+ float nd=(1.-smoothstep(.8,1.8,e))*cw[i];mp*=mix(1.,.86+.28*n(vec3(LL*260.,0.))*n(vec3(LL*41.,3.)),nd*.5);}}
+#pragma unroll_loop_end
+float dif=max(dot(normalize(wn),sun),0.);vec3 c=mp*(.3+.95*dif)+vec3(1.,.85,.5)*smoothstep(rv-.05,rv,rd)*(rv<1.4?1.2:0.);gl_FragColor=vec4(pow(c,vec3(1./2.2)),1.);}`});
+const brazil=new THREE.Mesh(new THREE.PlaneGeometry(1,1,260,260),bmat);brazil.frustumCulled=false;brazil.visible=false;brazil.renderOrder=2;G.add(brazil);
+// ---- city streaming (LOD + activity gating) ----
+const KM=1.5/6371;let brPlaced=false;const CS=(CITIES.BR||[]).map((c,i)=>({...c,base:c.base.replace('../','previews/'),i,state:'idle',obj:null}));
+for(const c of CS){c.up=sv(c.lon,c.lat);c.pos=c.up.clone().multiplyScalar(1.5+.004+.00004);}
+async function load(c){c.state='loading';try{const o=await loadCity(c.base,c.prefix,{walls:false,shadows:false,edgeCull:.06,fade:true,sun,surround:true,featherMap:true,noWater:true,instances:true});
+ if(c.state!=='loading'){o.dispose();return}const lo=THREE.MathUtils.degToRad(c.lon);const east=new THREE.Vector3(Math.cos(lo),0,-Math.sin(lo)),south=new THREE.Vector3().crossVectors(east,c.up);
+ o.root.matrixAutoUpdate=false;o.root.matrix.makeBasis(east,c.up,south).scale(new THREE.Vector3(KM*10,KM*10,KM*10)).setPosition(c.pos);G.add(o.root);
+ const sb=o.sur?o.sur.userData:{bbox:o.meta.bbox,tex:o.tex};const[L0,L1,A0,A1]=sb.bbox;PU.cut.value[c.i].set(L0,A0,L1,A1);PU.ct.value[c.i]=sb.tex;PU.cb.value[c.i].set(L0,A0,L1,A1);c.obj=o;c.state='ready';}catch(e){console.error(e);c.state='idle'}}
+function unload(c){PU.cw.value[c.i]=0;PU.ct.value[c.i]=null;if(c.obj){c.obj.dispose();c.obj=null}PU.con.value[c.i]=0;c.state='idle'}
+const ss=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t)};
+const TG=new THREE.Vector3(),UP=new THREE.Vector3(),YY=new THREE.Vector3(0,1,0),VD=new THREE.Vector3(),wp=new THREE.Vector3();
+function tilt(alt){const k=brPlaced?ss(.06,.02,alt):0;C.getWorldDirection(VD);const o=C.position,b=o.dot(VD),r=1.5+PU.lift.value+.000005,cc=o.lengthSq()-r*r,disc=b*b-cc;
+ let Pt;if(disc>0)Pt=o.clone().addScaledVector(VD,-b-Math.sqrt(disc));else Pt=o.clone().normalize().multiplyScalar(r);
+ TG.set(0,0,0).lerp(Pt,k);O.target.copy(TG);UP.copy(YY).lerp(Pt.clone().normalize(),k).normalize();C.up.copy(UP);
+ O._quat.setFromUnitVectors(C.up,YY);O._quatInverse.copy(O._quat).invert();
+ O.minDistance=brPlaced?1.5055*(1-k)+.00012*k:1.62;O.maxPolarAngle=Math.PI-(Math.PI-1.38)*k;}
+const FR=new THREE.Frustum(),PM=new THREE.Matrix4(),CW=new THREE.Vector3(),SPH=new THREE.Sphere();
+function lod(){C.updateMatrixWorld();FR.setFromProjectionMatrix(PM.multiplyMatrices(C.projectionMatrix,C.matrixWorldInverse));const dist=C.position.length(),alt=dist-1.5;
+ O.rotateSpeed=Math.min(1,Math.max(.02,alt/1.2));O.zoomSpeed=Math.min(1,Math.max(.35,alt*2));atm.visible=alt>.08;
+ PU.vex.value=.03+(.00113-.03)*ss(.25,.04,alt);tilt(alt);C.near=Math.max(alt*.3,.00003);const hz=Math.sqrt(Math.max(dist*dist-2.25,0));C.far=Math.min(dist+2.5,hz*1.3+.02);
+ PU.lift.value=.00002+.00398*ss(.25,1.,alt);land.scale.setScalar(1+Math.min(PU.lift.value*.15,.0004)/1.5);C.updateProjectionMatrix();bg.position.copy(C.position);bg.scale.setScalar(C.far*.9/100);
+ if(!brPlaced)return;
+ for(const c of CS){c.pos.copy(c.up).multiplyScalar(1.5+PU.lift.value+.00003);if(c.obj)c.obj.root.matrix.setPosition(c.pos);
+  wp.copy(c.pos).applyMatrix4(G.matrixWorld);const d=C.position.distanceTo(wp);
+  if(c.state==='idle'&&d<.16)load(c);if(c.state!=='idle'&&d>.3)unload(c);
+  if(c.obj){const a=ss(.1,.05,d),da=ss(.04,.022,d);c.obj.setFade(a,da);const inV=FR.intersectsSphere(SPH.set(wp,.03));c.active=inV&&d<.05;c.obj.root.visible=inV||d<.02;if(c.active)c.obj.tick(performance.now()/1000);
+   if(c.obj.inst){c.obj.root.updateMatrixWorld(true);for(const k of c.obj.inst.chunks){let v=false;if(c.active){CW.copy(k.c).applyMatrix4(c.obj.root.matrixWorld);const dd=C.position.distanceTo(CW);v=dd<(k.kind==='t'?.0065:.0055)+k.r*KM*10&&FR.intersectsSphere(SPH.set(CW,k.r*KM*10))}if(v&&!k.built){k.build();k.built=true}k.g.visible=v}}
+   if(d<.02){c.obj.root.updateMatrixWorld(true);const Lc=c.obj.root.worldToLocal(C.position.clone());let h=c.obj.sAt?c.obj.sAt(Lc.x,Lc.z):0;const hx=c.obj.meta.WX/2,hz2=c.obj.meta.HZ/2;
+    if(Math.abs(Lc.x)<hx&&Math.abs(Lc.z)<hz2)h=Math.max(h,c.obj.hAt(Lc.x,Lc.z));h=Math.max(h,0);if(Lc.y<h+.04){Lc.y=h+.04;C.position.copy(c.obj.root.localToWorld(Lc))}}
+   PU.con.value[c.i]=a>.55?1:0;PU.cw.value[c.i]=ss(.16,.09,d)}}}
+// ---- sound ----
+let AC=null;function doosh(){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const A=AC,T=A.currentTime;
+const len=A.sampleRate*1.2,b=A.createBuffer(1,len,A.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+const s=A.createBufferSource();s.buffer=b;const f=A.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(2500,T);f.frequency.exponentialRampToValueAtTime(120,T+.9);
+const g=A.createGain();g.gain.setValueAtTime(.0001,T);g.gain.exponentialRampToValueAtTime(.8,T+.04);g.gain.exponentialRampToValueAtTime(.001,T+1.1);s.connect(f).connect(g).connect(A.destination);s.start();
+const o=A.createOscillator(),og=A.createGain();o.frequency.setValueAtTime(110,T);o.frequency.exponentialRampToValueAtTime(38,T+.5);og.gain.setValueAtTime(.6,T);og.gain.exponentialRampToValueAtTime(.001,T+.6);o.connect(og).connect(A.destination);o.start();o.stop(T+.7);}catch(_){}}
+// ---- animation helpers ----
+const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;let anims=[];const anim=(ms,fn)=>new Promise(r=>{const t0=performance.now();anims.push(now=>{const x=Math.min(1,(now-t0)/ms);fn(x);if(x>=1){r();return true}})});
+let queue=Promise.resolve();
+function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
+ if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
+ fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
+ await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
+function placeNow(f,cont){if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function clear(){bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;for(const c of CS)unload(c);}
+let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
+// camera
+function camDist(){return C.position.distanceTo(O.target.lengthSq()>1?O.target.clone().multiplyScalar(0):O.target)}
+function spinTo(c,zoom){const p0=C.position.clone(),d0=p0.length(),d1=zoom?Math.max(1.75,6.2/zoom):d0,dir1=sv(c[0],c[1]);O.target.set(0,0,0);
+ return anim(1000,x=>{const e=ease(x);const dir=p0.clone().normalize().lerp(dir1,e).normalize();C.position.copy(dir.multiplyScalar(d0+(d1-d0)*e));C.lookAt(0,0,0)})}
+function zoomBy(k){const d=C.position.length();const nd=Math.min(O.maxDistance,Math.max(1.5+(d-1.5)/k,brPlaced?1.505:1.62));C.position.setLength(nd);}
+const rc=new THREE.Raycaster(),mv=new THREE.Vector2(),SP=new THREE.Sphere(new THREE.Vector3(),1.5);
+function pick(x,y){const r=R.domElement.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);rc.setFromCamera(mv,C);const p=new THREE.Vector3();if(!rc.ray.intersectSphere(SP,p))return null;
+ const q=p.normalize();return [THREE.MathUtils.radToDeg(Math.atan2(q.x,q.z)),THREE.MathUtils.radToDeg(Math.asin(q.y))]}
+function screenRadius(){const r=R.domElement.getBoundingClientRect();const d=Math.max(C.position.length(),1.5001);return (r.height/2)/Math.tan(THREE.MathUtils.degToRad(C.fov/2))*1.5/Math.sqrt(d*d-2.25)}
+function resize(){const r=host.getBoundingClientRect();C.aspect=r.width/Math.max(1,r.height);C.updateProjectionMatrix();R.setSize(r.width,r.height);}
+addEventListener('resize',resize);resize();
+R.setAnimationLoop(now=>{U.t.value=now/1000;anims=anims.filter(a=>!a(now));if(LU.pm.value>.5){LU.pa.value=now<pulseEnd?.35+.35*Math.sin(now/150):0;if(now>=pulseEnd){LU.pm.value=0;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true}}
+ O.update();lod();R.render(S,C);});
+function setBg(i){U.bg.value=i}
+const KMv=KM;function zoomRio(alt){const c=CS[0];const n=c.up.clone();const T=n.clone().multiplyScalar(1.5+PU.lift.value);if(alt>=.06){O.target.set(0,0,0);C.position.copy(n.multiplyScalar(1.5+alt));C.lookAt(0,0,0);return}
+ O.target.copy(T);O.minDistance=.00012;O.maxPolarAngle=1.38;C.up.copy(n);const s=new THREE.Vector3(0,-1,0).projectOnPlane(n).normalize();C.position.copy(T).addScaledVector(n,alt).addScaledVector(s,alt*.6);C.lookAt(T);O.update();}
+function project(lo,la){const v=sv(lo,la).multiplyScalar(1.5).applyMatrix4(G.matrixWorld).project(C);const r=R.domElement.getBoundingClientRect();return [r.left+(v.x+1)/2*r.width,r.top+(1-v.y)/2*r.height]}
+window.G3={project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},C,O};
+window.dispatchEvent(new Event('g3ready'));
