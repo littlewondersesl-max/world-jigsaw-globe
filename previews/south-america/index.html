@@ -1,0 +1,90 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>South America HD preview · World Jigsaw</title>
+<style>html,body{margin:0;height:100%;background:#0d1217;overflow:hidden;font:14px system-ui,sans-serif;color:#cfd8df}#ui{position:fixed;left:12px;top:10px;background:#0009;padding:8px 12px;border-radius:8px}#ui a{color:#8fd0ff;margin-right:8px}#fps{position:fixed;right:12px;top:10px;background:#0009;padding:4px 8px;border-radius:6px}</style>
+<script type="importmap">{"imports":{"three":"./three.module.js"}}</script></head><body>
+<div id="ui">South America HD preview · drag to orbit, scroll to zoom · <a href="../brazil/">Brazil close-up</a></div><div id="fps"></div>
+<script type="module">
+import * as THREE from 'three';import {RoomEnvironment} from './RoomEnvironment.js';import {OrbitControls} from './OrbitControls.js';
+const Q=new URLSearchParams(location.search),LOOK=+(Q.get('look')||2),FX=Q.get('fx')!=='0',STILL=Q.has('still');
+const S=await (await fetch('sa_shape.json')).json();const LON0=-82,LONS=48,LAT0=13,LATS=69;const Hu=10,Wu=10*S.W/S.H,DS=.12;
+const W2=innerWidth,H2=innerHeight;
+const R=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:STILL});R.setPixelRatio(STILL?1:Math.min(devicePixelRatio,2));R.setSize(W2,H2);
+R.shadowMap.enabled=true;R.shadowMap.type=THREE.PCFSoftShadowMap;R.toneMapping=THREE.ACESFilmicToneMapping;R.outputColorSpace=THREE.SRGBColorSpace;document.body.appendChild(R.domElement);
+const sc=new THREE.Scene();sc.background=new THREE.Color(0x0d1217);sc.environment=new THREE.PMREMGenerator(R).fromScene(new RoomEnvironment(),.04).texture;sc.environmentIntensity=.3;
+sc.add(new THREE.HemisphereLight(0xdfe8ff,0x3a3028,.5));
+const key=new THREE.DirectionalLight(0xfff1dc,2.4);key.position.set(-7,9,-3);key.castShadow=true;key.shadow.mapSize.set(4096,4096);Object.assign(key.shadow.camera,{left:-7,right:7,top:7,bottom:-7,far:40});key.shadow.bias=-.0004;key.shadow.normalBias=.02;sc.add(key);
+const rim=new THREE.DirectionalLight(0xbcd4ff,.8);rim.position.set(7,4,6);sc.add(rim);
+const TL=new THREE.TextureLoader();const tex=async(u,srgb=true)=>{const t=await TL.loadAsync(u);if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=R.capabilities.getMaxAnisotropy();return t};
+const img=async u=>{const i=new Image();i.src=u;await i.decode();const c=document.createElement('canvas');c.width=i.width;c.height=i.height;const x=c.getContext('2d');x.drawImage(i,0,0);return {w:i.width,h:i.height,d:x.getImageData(0,0,i.width,i.height).data}};
+const HM=await img('sa_height.png'),MK=await img('sa_mask.png');
+const samp=(I,u,v)=>{const x=Math.min(I.w-1,Math.max(0,u*I.w|0)),y=Math.min(I.h-1,Math.max(0,v*I.h|0));return I.d[(y*I.w+x)*4]/255};
+const W=(u,v)=>new THREE.Vector3((u-.5)*Wu,samp(HM,u,v)*DS,(v-.5)*Hu);
+// slab
+const smat=new THREE.MeshStandardMaterial({color:0x3b3128,roughness:.6});for(const pc of S.pieces){const st=pc.r.length>400?2:1;const ring=pc.r.filter((p,i)=>i%st==0).map(p=>new THREE.Vector2((p[0]-.5)*Wu,-(p[1]-.5)*Hu));if(ring.length<4)continue;
+const sg=new THREE.ExtrudeGeometry(new THREE.Shape(ring),{depth:.3,bevelEnabled:true,bevelThickness:.02,bevelSize:.006,bevelSegments:2,curveSegments:1});
+const slab=new THREE.Mesh(sg,smat);slab.rotation.x=-Math.PI/2;slab.position.y=-.325;slab.castShadow=slab.receiveShadow=true;slab.name=pc.n;sc.add(slab);}
+// terrain
+const tg=new THREE.PlaneGeometry(Wu,Hu,1000,1540);tg.rotateX(-Math.PI/2);
+const tm=new THREE.MeshStandardMaterial({map:await tex('sa_c.jpg'),displacementMap:await tex('sa_height.png',false),displacementScale:DS,normalMap:await tex('sa_normal.jpg',false),normalScale:new THREE.Vector2(LOOK==3?.5:1,LOOK==3?.5:1),alphaMap:await tex('sa_mask.png',false),alphaTest:.5,roughness:LOOK==2?.7:.9});
+if(true){tm.emissiveMap=await tex('sa_e.jpg');tm.emissive=new THREE.Color(1,1,1);tm.emissiveIntensity=FX?.15:.5;}
+const terr=new THREE.Mesh(tg,tm);terr.position.y=.0;terr.castShadow=terr.receiveShadow=true;sc.add(terr);
+const U={t:{value:0}};
+// ocean + coastal foam
+{const og=new THREE.PlaneGeometry(Wu,Hu,1,1);og.rotateX(-Math.PI/2);const ct=await tex('sa_coast.png',false);
+ const om=new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{t:U.t,c:{value:ct}},vertexShader:`varying vec2 vUv;varying vec3 vW;void main(){vUv=uv;vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+ fragmentShader:`uniform float t;uniform sampler2D c;varying vec2 vUv;varying vec3 vW;
+ float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
+ void main(){float k=texture2D(c,vUv).r;if(k<.01)discard;float d=1.-k;float nz=n(vUv*900.+t*.3)*.6+n(vUv*260.-t*.2)*.4;
+ float band=smoothstep(.75,1.,sin(d*38.-t*1.6+nz*2.))*smoothstep(.0,.35,k)*(1.-smoothstep(.9,1.,k)*.3);
+ float shore=smoothstep(.86,.97,k+nz*.08);float foam=max(band*.7*k,shore)*(.6+.4*nz);
+ vec3 water=mix(vec3(.05,.17,.24),vec3(.12,.42,.48),k*k);gl_FragColor=vec4(mix(water,vec3(.93,.96,.97),foam),max(k*.75,foam));
+ #include <colorspace_fragment>
+ }`});
+ const o=new THREE.Mesh(og,om);o.position.y=.004;o.renderOrder=2;sc.add(o);}
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(80,80),new THREE.MeshStandardMaterial({color:0x10171d,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.8;ground.receiveShadow=true;sc.add(ground);
+if(FX){
+ // rivers
+ const RV=await (await fetch('sa_rivers.json')).json();const pos=[],uvs=[],idx=[];
+ for(const r of RV){const pts=r.p.map(p=>W(p[0],p[1]));if(pts.length<2)continue;let s=0;const w=.0035*r.w;
+  for(let i=0;i<pts.length;i++){const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)];const d=new THREE.Vector3().subVectors(b,a).setY(0).normalize();const nn=new THREE.Vector3(-d.z,0,d.x).multiplyScalar(w);
+   if(i)s+=pts[i].distanceTo(pts[i-1]);const p=pts[i];const y=p.y+.012;const base=pos.length/3;pos.push(p.x+nn.x,y,p.z+nn.z,p.x-nn.x,y,p.z-nn.z);uvs.push(s*40,0,s*40,1);
+   if(i)idx.push(base-2,base-1,base,base-1,base+1,base);}}
+ const rg=new THREE.BufferGeometry();rg.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));rg.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));rg.setIndex(idx);
+ const rm=new THREE.ShaderMaterial({transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,uniforms:{t:U.t},vertexShader:`varying vec2 vUv;varying vec3 vW;void main(){vUv=uv;vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+ fragmentShader:`uniform float t;varying vec2 vUv;varying vec3 vW;float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
+ void main(){vec2 q=vec2(vUv.x-t*1.2,vUv.y*3.);float r=n(q*vec2(1.,2.))*.6+n(q*vec2(3.,5.)+7.)*.4;float edge=1.-pow(abs(vUv.y*2.-1.),3.);
+ vec3 V=normalize(cameraPosition-vW);float fr=pow(1.-max(V.y,0.),3.);vec3 col=mix(vec3(.07,.24,.3),vec3(.55,.72,.8),fr*.8+.15);float glint=smoothstep(.72,.9,r)*.6;col+=glint*vec3(1.,.95,.85)*.5;
+ gl_FragColor=vec4(col,.82*edge);
+ #include <colorspace_fragment>
+ }`});const rmesh=new THREE.Mesh(rg,rm);rmesh.renderOrder=3;sc.add(rmesh);
+ // trees
+ const FD=await img('sa_forest.png');const tree=new THREE.IcosahedronGeometry(.0042,0);tree.scale(1,1.35,1);tree.translate(0,.0055,0);
+ const sway=m=>{m.onBeforeCompile=s=>{s.uniforms.t=U.t;s.vertexShader='uniform float t;\n'+s.vertexShader.replace('#include <begin_vertex>',`#include <begin_vertex>
+  vec4 ip=instanceMatrix[3];float ph=ip.x*37.+ip.z*23.;transformed.x+=sin(t*1.7+ph)*.08*position.y;transformed.z+=cos(t*1.3+ph)*.06*position.y;`)}};
+ const tmat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.85,flatShading:true});sway(tmat);
+ const N=Q.get('trees')?+Q.get('trees'):110000;const im=new THREE.InstancedMesh(tree,tmat,N);let c=0;const M=new THREE.Matrix4(),col=new THREE.Color(),qq=new THREE.Quaternion();
+ for(let k=0;k<N*6&&c<N;k++){const u=Math.random(),v=Math.random();const f=samp(FD,u,v);if(Math.random()>f*f||samp(MK,u,v)<.5)continue;const p=W(u,v);const s=.6+Math.random()*.8;
+  M.compose(p,qq.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.random()*6),new THREE.Vector3(s,s*(.8+Math.random()*.5),s));im.setMatrixAt(c,M);col.setHSL(.25+Math.random()*.07,.35+Math.random()*.2,.07+Math.random()*.07);im.setColorAt(c++,col);}
+ im.count=c;im.castShadow=true;sc.add(im);window.treeCount=c;
+ // cities
+ const C=[['Buenos Aires',-58.38,-34.6,15.5],['Lima',-77.04,-12.05,11],['Bogotá',-74.07,4.71,11],['Santiago',-70.65,-33.45,7],['Medellín',-75.57,6.24,4],['Caracas',-66.9,10.48,3],['Guayaquil',-79.9,-2.19,3],['Cali',-76.53,3.45,2.8],['Asunción',-57.58,-25.28,2.3],['Maracaibo',-71.64,10.65,2.2],['Barranquilla',-74.8,10.96,2.2],['Quito',-78.47,-.18,2],['La Paz',-68.15,-16.5,1.9],['Montevideo',-56.16,-34.9,1.8],['Santa Cruz',-63.18,-17.78,1.7],['Córdoba',-64.18,-31.42,1.6],['Rosario',-60.65,-32.95,1.3],['Arequipa',-71.54,-16.4,1],['Valparaíso',-71.62,-33.05,1],['Georgetown',-58.16,6.8,.3],['Paramaribo',-55.2,5.85,.25],['Cayenne',-52.33,4.92,.15],['São Paulo',-46.63,-23.55,22],['Rio de Janeiro',-43.2,-22.9,13.5],['Belo Horizonte',-43.94,-19.92,6],['Brasília',-47.88,-15.79,4.8],['Porto Alegre',-51.23,-30.03,4.3],['Fortaleza',-38.54,-3.72,4.1],['Recife',-34.9,-8.05,4.1],['Salvador',-38.5,-12.97,4],['Curitiba',-49.27,-25.43,3.7],['Manaus',-60.02,-3.1,2.3]];
+ const bg=new THREE.BoxGeometry(1,1,1);bg.translate(0,.5,0);const bm=new THREE.MeshStandardMaterial({color:0x8f9aa4,roughness:.35,metalness:.3});
+ const fg=new THREE.CapsuleGeometry(.0004,.0012,2,4);fg.translate(0,.001,0);const fm=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.7});
+ const NB=C.reduce((a,c)=>a+Math.round(c[3]*140),0),NF=C.reduce((a,c)=>a+Math.round(c[3]*120),0);const B=new THREE.InstancedMesh(bg,bm,NB),F=new THREE.InstancedMesh(fg,fm,NF);let bi=0,fi=0;
+ for(const [n,lo,la,pop] of C){const u=(lo-LON0)/LONS,v=(LAT0-la)/LATS;const c0=W(u,v);const rad=.018*Math.sqrt(pop);const big=pop>=4;
+  for(let i=0;i<Math.round(pop*140);i++){const a=Math.random()*6.283,r=rad*Math.pow(Math.random(),.7);const x=c0.x+Math.cos(a)*r,z=c0.z+Math.sin(a)*r;const near=1-r/rad;
+   const hgt=big?.002+Math.pow(near,2.2)*.012*Math.sqrt(pop/4)*(.4+Math.random()):.0015+Math.random()*.002;const wdt=.0012+Math.random()*.0012;
+   const y=samp(HM,(x/Wu+.5),(z/Hu+.5))*DS;M.compose(new THREE.Vector3(x,y,z),qq.setFromAxisAngle(new THREE.Vector3(0,1,0),.3),new THREE.Vector3(wdt,hgt,wdt));B.setMatrixAt(bi,M);
+   col.setHSL(.58,.08+Math.random()*.1,(hgt>.006?.32:.45)+Math.random()*.15);B.setColorAt(bi++,col);}
+  for(let i=0;i<Math.round(pop*120);i++){const a=Math.random()*6.283,r=rad*(.2+Math.random()*1.1);const x=c0.x+Math.cos(a)*r,z=c0.z+Math.sin(a)*r;const y=samp(HM,(x/Wu+.5),(z/Hu+.5))*DS;
+   M.compose(new THREE.Vector3(x,y,z),qq.identity(),new THREE.Vector3(1,1,1));F.setMatrixAt(fi,M);col.setHSL(Math.random(),.35,.35);F.setColorAt(fi++,col);}}
+ B.castShadow=B.receiveShadow=true;sc.add(B,F);window.cityCount=[bi,fi];
+}
+const cam=new THREE.PerspectiveCamera(30,W2/H2,.005,200);const ctl=new OrbitControls(cam,R.domElement);ctl.enableDamping=true;ctl.maxPolarAngle=1.35;ctl.minDistance=.05;ctl.maxDistance=40;
+const ll=(lo,la)=>[(((lo-LON0)/LONS)-.5)*Wu,(((LAT0-la)/LATS)-.5)*Hu];const [ax,az]=ll(-69.4,-15.8),[px,pz]=ll(-58,-34.6),[rx,rz]=ll(-43.2,-22.9);
+const SH={full:[[0,15.6,7.4],[0,-.1,.35]],andes:[[ax-.6,.9,az+.9],[ax,.06,az]],plata:[[px,1.0,pz+.9],[px,.02,pz]],rio:[[rx-.1,1.0,rz+.75],[rx-.05,.03,rz-.07]]};
+window.shot=(k,t=0)=>{const s=SH[k];cam.position.set(...s[0]);ctl.target.set(...s[1]);ctl.update();U.t.value=t;R.render(sc,cam);return R.domElement.toDataURL('image/png');};
+window.lerpShot=(a,b,f,t)=>{const A=SH[a],B=SH[b],e=f*f*(3-2*f);cam.position.set(...A[0].map((x,i)=>x+(B[0][i]-x)*e));ctl.target.set(...A[1].map((x,i)=>x+(B[1][i]-x)*e));ctl.update();U.t.value=t;R.render(sc,cam);};
+window.ready=true;
+if(!STILL){shot('full');const clk=new THREE.Clock();let fr=0,last=performance.now();R.setAnimationLoop(()=>{U.t.value=clk.getElapsedTime();ctl.update();R.render(sc,cam);fr++;const n=performance.now();if(n-last>1000){document.getElementById('fps').textContent=Math.round(fr*1000/(n-last))+' fps';fr=0;last=n;}});
+ addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight)});}
+</script></body></html>
