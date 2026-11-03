@@ -164,7 +164,7 @@ function showCard(n){const f=FACTS[n];$('cName').textContent=n.replace('Dem. Rep
  $('cFacts').innerHTML=[`🌍 Continent: ${f[0]}`,`🏛️ Capital: ${f[1]}`,`⭐ Famous for: ${f[2]}`,`🐾 Animal: ${f[3]}`,`🍽️ Food: ${f[4]}`].map(t=>`<li>${t}</li>`).join('');$('card').hidden=false;}
 $('cOk').onclick=()=>{$('card').hidden=true;if(placed.size==pieces.length&&pieces.length){play('win');say('🎉 You finished the puzzle! 🎉',5000);}};
 // hints
-function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used: ${p.hint}/3`:'Tap a piece to pick it.';
+function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used: ${p.hint}/3`:'Tap the stack to draw a piece.';
  ['h1','h2','h3'].forEach((h,i)=>$(h).disabled=!p||p.hint<i);if(!p)$('hintText').textContent='';}
 $('h1').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,1);setAngle(p,0);$('hintText').innerHTML='⬆️ This way is UP (north). I turned the piece for you!';updHints();};
 $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=p.f.name,f=FACTS[n],nb=(neigh[n]||[]);
@@ -255,9 +255,9 @@ window.__release=release;
 // carry: piece follows the pointer. A drag releases on lift; a click/tap keeps it on the cursor until the next click/tap.
 let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';
  drag={p,el:src,x:e.clientX,y:e.clientY,moved:true};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
- const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0;carrying=p;
- const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{downs++;ev.stopPropagation();ev.preventDefault();},
-  up=ev=>{const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
+ const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;
+ const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{if(ev.target.closest&&ev.target.closest('.dh')){hd=1;return;}downs++;ev.stopPropagation();ev.preventDefault();},
+  up=ev=>{if(hd){hd=0;return;}const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
    removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);
    drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY);};
  addEventListener('pointermove',mv,true);addEventListener('pointerdown',dn,true);addEventListener('pointerup',up,true);}
@@ -275,3 +275,6 @@ Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,re
 (function(){const B=document.getElementById('menuB'),L=document.getElementById('menuL'),P=document.getElementById('credP');if(!B)return;
 B.onclick=e=>{e.stopPropagation();L.hidden=!L.hidden;B.setAttribute('aria-expanded',!L.hidden)};document.addEventListener('click',e=>{if(!L.hidden&&!L.contains(e.target)){L.hidden=true;B.setAttribute('aria-expanded',false)}});
 document.getElementById('credB').onclick=()=>{L.hidden=true;P.hidden=false};document.getElementById('credX').onclick=()=>P.hidden=true;P.onclick=e=>{if(e.target===P)P.hidden=true};addEventListener('keydown',e=>{if(e.key==='Escape')P.hidden=true});})();
+(function(){const st=document.getElementById('stack'),sg=document.getElementById('stage');if(!st||!sg)return;
+ const f=()=>{const r=sg.getBoundingClientRect();st.style.bottom=Math.max(14,innerHeight-r.bottom+14)+'px';st.style.left=Math.max(14,r.left+14)+'px';};
+ addEventListener('resize',f);setTimeout(f,0);setTimeout(f,1500);})();

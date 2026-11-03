@@ -12,9 +12,10 @@ await p.selectOption('#set','Africa');await W(2500);
 await ev(()=>{const c=document.getElementById('lbl');c.checked=false;c.dispatchEvent(new Event('change'))});
 await ev(()=>__game.spinTo([10,10],1.3));await W(1300);await shot('0-start');
 // tray scroll (horizontal swipe on tray)
-const tr=await p.locator('#pieces').boundingBox();const sl0=await ev(()=>document.getElementById('pieces').scrollLeft);
-await gest([[tr.x+tr.width-20,tr.y+tr.height/2]],[[tr.x+40,tr.y+tr.height/2]]);await W(500);
-R.trayScroll=[sl0,await ev(()=>document.getElementById('pieces').scrollLeft)];
+const hb=await ev(()=>{const r=document.querySelector('.drawer.dL .dh').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]});
+await gest([hb],[[hb[0]+200,hb[1]]]);await W(900);const o1=await ev(()=>__game.DR.L.open);
+const hb2=await ev(()=>{const r=document.querySelector('.drawer.dL .dh').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]});
+await gest([hb2],[[2,hb2[1]]]);await W(1500);R.drawerSwipe=[o1,await ev(()=>__game.DR.L.open)];
 // globe one-finger rotate vs empty-space orbit
 const st=await p.locator('#stage').boundingBox();const cx=st.x+st.width/2,cy=st.y+st.height/2;
 const q0=await ev(()=>G3.quat());const c0=await ev(()=>G3.C.position.toArray());
@@ -23,8 +24,8 @@ const q1=await ev(()=>G3.quat());const c1=await ev(()=>G3.C.position.toArray());
 await gest([[st.x+12,st.y+14]],[[st.x+80,st.y+14]]);R.orbit={quatChanged:JSON.stringify(q1)!=JSON.stringify(await ev(()=>G3.quat())),camChanged:JSON.stringify(c1)!=JSON.stringify(await ev(()=>G3.C.position.toArray()))};
 await ev(()=>__game.spinTo([10,10],1.3));await W(1300);
 // tap-to-pick + drag: touch a tray piece and drag to blank water on globe
-await ev(()=>{const q=__game.pieces.find(q=>q.f.name=='Egypt');q.angle=40;const el=q.el;el.scrollIntoView({inline:'center'})});await W(300);
-const eb=await ev(()=>{const r=__game.pieces.find(q=>q.f.name=='Egypt').el.getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]});
+R.top=await ev(()=>{const q=__game.pieces.find(q=>q.dloc==='L');q.angle=40;return q.f.name});
+const eb=await ev(()=>{const r=document.getElementById('stack').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]});
 const wat=await ev(()=>G3.project(-20,0));
 await gest([eb],[wat],14);await W(600);R.drag={parked:await ev(()=>__game.parked.map(q=>q.f.name)),anc:await ev(()=>__game.anc&&__game.anc.step)};await shot('1-dropped');
 await W(1800);const S=()=>ev(()=>__game.anc&&{step:__game.anc.step,s:__game.anc.p.s,a:__game.anc.p.angle,x:__game.anc.p.sx,y:__game.anc.p.sy});
