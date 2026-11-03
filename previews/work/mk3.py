@@ -9,7 +9,7 @@ cfg={'brazil':dict(TITLE='Brazil HD preview',DS='.12',SEGX='1400',SEGY='1440',TR
 import copy
 sc=dict(cfg['brazil']);sc.update(TITLE='Brazil showcase – Rio de Janeiro craftsman pass',SHOW=json.dumps(dict(lo=-43.25,la=-22.9,r=.11,ru=.011)),LINKS='<a href="../brazil/">Brazil (untouched)</a><a href="../globe-reveal/">Globe reveal</a>',
  SHOTS=[['rio',-43.23,-22.92,.8,1.1],['rioz',-43.25,-22.92,-.2,.9],['riozz',-43.2,-22.94,-.09,.8],['spz',-46.63,-23.56,-.2,.9],['spzz',-46.63,-23.56,-.09,.8],['ctl',-48.3,-25.3,-.2,.9]])
-import os;os.makedirs('brazil-showcase',exist_ok=True);cfg['brazil-showcase']=sc
+import os;os.makedirs('brazil-showcase',exist_ok=True);pass  # brazil-showcase now hand-built (v1.html kept)
 for d,c in cfg.items():
   s=t
   for k,v in c.items():s=s.replace('%'+k+'%',v if isinstance(v,str) else json.dumps(v,ensure_ascii=False))
