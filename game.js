@@ -198,3 +198,6 @@ function drawPtr(){const f=byName[hot];if(!f)return;const c=d3.geoCentroid(f);
 (function hook(){if(!window.G3)return setTimeout(hook,200);G3.dom.addEventListener('pointermove',e=>{if(e.buttons||!placed.size)return;const ll=G3.pick(e.clientX,e.clientY);let n=null;  if(ll)for(const k of placed)if(d3.geoContains(byName[k],ll)){n=k;break}setHot(n);}); G3.dom.addEventListener('pointerleave',()=>setHot(null)); })();
 window.__game.hot=setHot;
 })();
+(function(){const B=document.getElementById('menuB'),L=document.getElementById('menuL'),P=document.getElementById('credP');if(!B)return;
+B.onclick=e=>{e.stopPropagation();L.hidden=!L.hidden;B.setAttribute('aria-expanded',!L.hidden)};document.addEventListener('click',e=>{if(!L.hidden&&!L.contains(e.target)){L.hidden=true;B.setAttribute('aria-expanded',false)}});
+document.getElementById('credB').onclick=()=>{L.hidden=true;P.hidden=false};document.getElementById('credX').onclick=()=>P.hidden=true;P.onclick=e=>{if(e.target===P)P.hidden=true};addEventListener('keydown',e=>{if(e.key==='Escape')P.hidden=true});})();

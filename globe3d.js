@@ -47,7 +47,7 @@ fragmentShader:`varying vec3 n,v;void main(){float k=pow(1.-abs(dot(n,v)),5.);gl
 // ---- stylised country layer: equirectangular canvases (base = placed, fresh = revealing / hint glow) ----
 const TW=4096,TH=2048;const mkC=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
 const baseC=mkC(TW,TH),freshC=mkC(2048,1024);const bctx=baseC.getContext('2d'),fctx=freshC.getContext('2d');
-const baseT=new THREE.CanvasTexture(baseC),freshT=new THREE.CanvasTexture(freshC);for(const t of [baseT,freshT]){t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;}
+const baseT=new THREE.CanvasTexture(baseC),freshT=new THREE.CanvasTexture(freshC);for(const t of [baseT,freshT]){t.anisotropy=8;}
 const LU={...U,bt:{value:baseT},ft:{value:freshT},rc:{value:new THREE.Vector3(0,0,1)},rv:{value:2},pm:{value:0},pa:{value:0}};
 const land=new THREE.Mesh(new THREE.SphereGeometry(1.5006,256,128),new THREE.ShaderMaterial({uniforms:LU,transparent:true,depthWrite:false,
 vertexShader:`varying vec2 vu;varying vec3 q,wn;void main(){vu=uv;q=normalize(position);wn=normalize(mat3(modelMatrix)*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
@@ -214,12 +214,15 @@ function pcGeom(h,s){const N=40,pos=[],uv=[],idx=[];for(let j=0;j<=N;j++)for(let
  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,b,d,a,d,c);}
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);return g;}
 function pcAdd(id,canvas,h){pcDel(id);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;
- const m=new THREE.Mesh(pcGeom(h,1),new THREE.MeshBasicMaterial({map:t,transparent:true,alphaTest:.02,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4}));m.renderOrder=5;
+ const m=new THREE.Mesh(pcGeom(h,1),new THREE.ShaderMaterial({uniforms:{map:{value:t},op:{value:1},sun:U.sun},transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,
+ vertexShader:`varying vec2 vu;varying vec3 wn;void main(){vu=uv;wn=normalize(mat3(modelMatrix)*normalize(position));gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+ fragmentShader:`uniform sampler2D map;uniform float op;uniform vec3 sun;varying vec2 vu;varying vec3 wn;void main(){vec4 c=texture2D(map,vu);if(c.a<.02)discard;vec3 N=normalize(wn);float l=dot(N,sun);
+ vec3 col=pow(c.rgb,vec3(2.2))*(.22+1.*smoothstep(-.1,.35,l))+vec3(1.,.95,.85)*pow(max(dot(N,normalize(sun+vec3(0.,0.,1.))),0.),60.)*.08*smoothstep(0.,.3,l);gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;
  const hold=new THREE.Group();hold.add(m);G.add(hold);PCS[id]={hold,m,h,s:1};}
 const _e=new THREE.Vector3(),_n=new THREE.Vector3(),_u=new THREE.Vector3(),_M=new THREE.Matrix4(),_Q=new THREE.Quaternion();
 function pcSet(id,o){const P=PCS[id];if(!P)return;if(o.s!=null&&Math.abs(o.s-P.s)>1e-4){P.m.geometry.dispose();P.m.geometry=pcGeom(P.h,o.s);P.s=o.s;}
  const lo=THREE.MathUtils.degToRad(o.lon);_n.copy(sv(o.lon,o.lat));_e.set(Math.cos(lo),0,-Math.sin(lo));_u.crossVectors(_n,_e);_M.makeBasis(_e,_u,_n);P.hold.quaternion.setFromRotationMatrix(_M);
- P.m.rotation.z=-THREE.MathUtils.degToRad(o.a||0);if(o.op!=null)P.m.material.opacity=o.op;P.hold.visible=o.vis!==false;}
+ P.m.rotation.z=-THREE.MathUtils.degToRad(o.a||0);if(o.op!=null)P.m.material.uniforms.op.value=o.op;P.hold.visible=o.vis!==false;}
 function pcDel(id){const P=PCS[id];if(!P)return;G.remove(P.hold);P.m.geometry.dispose();P.m.material.map.dispose();P.m.material.dispose();delete PCS[id];}
 let OL=null;function outline(f){if(OL){G.remove(OL);OL.geometry.dispose();OL=null}if(!f)return;const pts=[];const geo=f.geometry;const polys=geo.type=='Polygon'?[geo.coordinates]:geo.coordinates;
  for(const p of polys)for(const ring of p){for(let i=0;i<ring.length-1;i++){const a=ring[i],b=ring[i+1],n=Math.max(1,Math.ceil(d3.geoDistance(a,b)/0.01));const it=d3.geoInterpolate(a,b);

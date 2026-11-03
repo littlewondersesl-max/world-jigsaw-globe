@@ -13,8 +13,16 @@
 <section id="tray"><h2>Puzzle box</h2><div id="pieces"></div></section>
 <div id="tube" title="Flag colours collected"><div id="tubeFill"></div></div>
 <section id="stage">
+<div id="menuW"><button id="menuB" aria-haspopup="true" aria-expanded="false">☰ Menu</button><div id="menuL" hidden><button id="credB">Credits &amp; data</button><a href="v1/">Classic version</a></div></div>
+<div id="credP" hidden><div class="cp"><button id="credX" aria-label="Close">✕</button><h3>Credits &amp; data</h3><ul>
+<li><b>Natural Earth</b>: country borders, coastlines and I shaded-relief colours used for the globe and pieces (public domain). <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">naturalearthdata.com</a></li>
+<li><b>ESA WorldCover 2021</b>: South America land-cover maps, © ESA WorldCover project 2021 / contains modified Copernicus Sentinel data. Licence <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></li>
+<li><b>OpenStreetMap</b>: city data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database Licence (ODbL)</li>
+<li><b>Mapzen Terrain Tiles</b>: elevation (sources incl. SRTM, GMTED, ETOPO1; see <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">attribution</a>)</li>
+<li><b>NASA Blue Marble</b>: Earth imagery (public domain, NASA Earth Observatory)</li>
+<li>Wood, lighting, starfield and sounds: original procedural work for this project.</li></ul></div></div>
 <div id="zoom"><button id="zin">+</button><button id="zout">−</button></div>
-<div id="msg"></div><div id="credit">Piece &amp; globe colours: Natural Earth I shaded relief (public domain) · South America maps: ESA WorldCover 2021 (CC BY 4.0) · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Mapzen Terrain Tiles · Natural Earth · NASA Blue Marble · <a href="v1/">Classic version</a></div></section>
+<div id="msg"></div></section>
 <aside id="hints"><h2>Hints</h2><div id="sel">Tap a piece to pick it.</div>
 <div id="rot"><button id="rl" title="Turn left">⟲</button><button id="rr" title="Turn right">⟳</button></div>
 <button class="hint" id="h1">1. Which way is up?</button>
