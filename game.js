@@ -61,17 +61,17 @@ function trayScale(f){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).sc
 function buildSet(){const v=$('set').value;let names=feats.map(f=>f.name);
  if(v=='starter')names=STARTER;else if(v=='Americas')names=names.filter(n=>/America/.test(FACTS[n][0]));
  else if(v=='Oceania')names=names.filter(n=>/Oceania|Antarctica/.test(FACTS[n][0]));else if(v!='all')names=names.filter(n=>FACTS[n][0].includes(v));
- placed.clear();G3.clear();pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
+ placed.clear();G3.clear();for(const q of [...parked])unpark(q);anc=null;aui.innerHTML='';hdl.style.display='none';pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;$('tubeFill').innerHTML='';renderTray();updHints();progress();draw();}
 function cols(n){return (FLAGS[n]||[0,['#cccccc']])[1];}
-function renderTray(){const box=$('pieces');box.innerHTML='';for(const p of pieces){if(placed.has(p.f.name))continue;const d=document.createElement('div');d.className='piece'+(p===sel?' sel':'');d.dataset.name=p.f.name;
+function renderTray(){const box=$('pieces');box.innerHTML='';for(const p of pieces){if(placed.has(p.f.name)||p.parked)continue;const d=document.createElement('div');d.className='piece'+(p===sel?' sel':'');d.dataset.name=p.f.name;
  const s=trayScale(p.f);d.innerHTML=shapeSVG(p.f,s).svg;const sv=d.firstChild;sv.setAttribute('width',86);sv.setAttribute('height',86);sv.style.transform=`rotate(${p.angle}deg)`;
  d.addEventListener('pointerdown',e=>startDrag(e,p,d));box.appendChild(d);p.el=d;}}
-function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;}
+function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.ov)p.ov.firstChild.style.transform=`rotate(${p.angle}deg)`;if(anc&&anc.p===p&&anc.step==='rot'){clearTimeout(setAngle.t);setAngle.t=setTimeout(checkAnc,250);}if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;}
 function select(p){sel=p;document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();}
 // drag
 let drag=null,ghost=null;
-function updateGhostShape(){if(!drag)return;const g=shapeSVG(drag.p.f,Math.max(G3.screenRadius(),1));ghost.innerHTML=g.svg;let sv=ghost.firstChild,sz=2*g.r;
+function updateGhostShape(){if(!drag)return;const sr=Math.max(G3.screenRadius(),1),gs=drag.p.parked?drag.p.s:placed.size?1:boxScale(drag.p.f);const g=shapeSVG(drag.p.f,sr*gs);ghost.innerHTML=g.svg;let sv=ghost.firstChild,sz=2*g.r;
  if(sz<34){sv.setAttribute('width',34);sv.setAttribute('height',34);sz=34;}drag.half=sz/2;sv.style.transform=`rotate(${drag.p.angle}deg)`;moveGhost(drag.x,drag.y);}
 function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left=(x-drag.half)+'px';ghost.style.top=(y-drag.half)+'px';}
 function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.pointerId);drag={p,el,x:e.clientX,y:e.clientY,moved:false};
@@ -83,20 +83,65 @@ window.addEventListener('keydown',e=>{if(!sel)return;if(e.key=='q'||e.key=='Q')s
 $('rl').onclick=()=>sel&&setAngle(sel,sel.angle-15);$('rr').onclick=()=>sel&&setAngle(sel,sel.angle+15);
 function say(t,ms){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(say.t);say.t=setTimeout(()=>m.style.display='none',ms||1800);}
 function bounce(p){play('miss');if(p.el){p.el.animate([{transform:'translateX(-8px)'},{transform:'translateX(8px)'},{transform:'none'}],{duration:300});}}
-// first piece = anchor: never wrong; it straightens, resizes and flies to its real place
-let anchoring=false;async function anchor(p,x,y){if(anchoring)return;anchoring=true;const f=p.f;const sv=p.el.querySelector('svg').cloneNode(true);const fl=document.createElement('div');fl.id='flyer';fl.appendChild(sv);
- const b=p.el.getBoundingClientRect(),w=b.width;Object.assign(fl.style,{position:'fixed',left:'0',top:'0',width:w+'px',height:w+'px',zIndex:9,pointerEvents:'none',transition:'transform .9s cubic-bezier(.6,0,.3,1),opacity .5s',transform:`translate(${x-w/2}px,${y-w/2}px) rotate(${p.angle}deg)`});
- sv.style.transform='none';document.body.appendChild(fl);p.angle=0;say('First piece! It goes right here ✨',2500);await G3.spinTo(f.c);
- const [tx,ty]=G3.project(f.c[0],f.c[1]);const s=Math.max(.15,Math.min(4,G3.screenRadius()*f.rad*2.2/w));fl.getBoundingClientRect();
- fl.style.transform=`translate(${tx-w/2}px,${ty-w/2}px) rotate(0deg) scale(${s})`;await new Promise(r=>setTimeout(r,950));fl.style.opacity='0';place(p);setTimeout(()=>fl.remove(),600);anchoring=false;}
-function drop(p,x,y){const r=G3.dom.getBoundingClientRect();if(x<r.left||x>r.right||y<r.top||y>r.bottom){return;}
- const ll=G3.pick(x,y);if(!ll){bounce(p);say('Drop it on the globe!');return;}
- if(placed.size===0){anchor(p,x,y);return;}
- const f=p.f,easy=$('easy').checked,small=f.rad<0.12;let tol=Math.max(0.09,f.rad*0.9);if(easy&&small)tol=Math.max(tol,0.25);
- const dist=d3.geoDistance(ll,f.c);if(!(dist<tol||d3.geoContains(f,ll))){bounce(p);say('Not here. Try again!');return;}
- const off=Math.min(p.angle,360-p.angle);if(off>25&&!(easy&&small)){bounce(p);say('Right place! Now turn it to fit ⟲ ⟳',2500);return;}
- place(p);}
-function place(p){placed.add(p.f.name);G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);}
+// ---- guided anchor + parking ----
+// Pieces dropped on the blank globe park where they land (not locked, not counted). The first piece dropped becomes the anchor:
+// it blinks, then the player fixes its size (drag the corner handle), its heading (steering-wheel spin), and finally drags it
+// north/south into a blinking true-size outline at its real latitude. Longitude stays where it was dropped: the globe is
+// silently re-based so that longitude becomes the country's real one. Later pieces fit relative to the anchor.
+const D2R=Math.PI/180,R2D=180/Math.PI;let parked=[],anc=null;const K=100;
+const layer=document.createElement('div');layer.id='park';document.body.appendChild(layer);
+function mkOverlay(p){const o=document.createElement('div');o.className='pk';const g=shapeSVG(p.f,K);o.innerHTML=g.svg;o.r=g.r;o.style.width=o.style.height=2*g.r+'px';
+ o.firstChild.style.transform=`rotate(${p.angle}deg)`;layer.appendChild(o);return o;}
+function park(p,ll,s){if(!p.parked){p.parked=true;parked.push(p);p.ov=mkOverlay(p);p.ov.addEventListener('pointerdown',e=>{if(anc&&anc.p===p)return;startDrag(e,p,p.ov)});}
+ p.el=p.ov;p.lon=ll[0];p.lat=ll[1];p.s=s;renderTray();}
+function unpark(p){if(!p.parked)return;p.parked=false;parked=parked.filter(q=>q!==p);p.ov.remove();p.ov=null;}
+function boxScale(f){return trayScale(f)*86/88/Math.max(G3.screenRadius(),1);}
+function posOv(p){const o=p.ov;if(!o)return;if(!G3.facing(p.lon,p.lat)){o.style.display='none';return}o.style.display='';const [x,y]=G3.project(p.lon,p.lat);
+ const k=G3.screenRadius()*p.s/K;o.style.transform=`translate(${x-o.r}px,${y-o.r}px) scale(${k})`;p.sx=x;p.sy=y;p.spx=o.r*k;}
+(function loop(){if(window.G3){for(const p of parked)posOv(p);if(anc)ancUI();}requestAnimationFrame(loop);})();
+// anchor UI
+const aui=document.createElementNS('http://www.w3.org/2000/svg','svg');aui.id='aui';document.body.appendChild(aui);
+const angOff=a=>{a=((a%360)+360)%360;return a>180?a-360:a};
+function startAnchor(p,ll){park(p,ll,boxScale(p.f));anc={p,step:'blink'};sel=p;updHints();p.ov.classList.add('anc');p.ov.style.cursor='default';
+ const cont=FACTS[p.f.name][0];say(`⚓ Anchor: ${p.f.name}. The world is built around it.`,2600);p.ov.firstChild.animate([{opacity:1},{opacity:.25},{opacity:1},{opacity:.25},{opacity:1}],{duration:1400});
+
+ setTimeout(()=>nextStep(),1500);p.ov.addEventListener('pointerdown',ancDown);}
+function nextStep(){const p=anc.p;if(Math.abs(p.s-1)>.12){anc.step='scale';say(p.s<1?'Too small: drag the handle outward ⤢':'Too big: drag the handle inward ⤡',3500);return}p.s=1;
+ if(Math.abs(angOff(p.angle))>10){anc.step='rot';say('Turn it north-up: spin it like a steering wheel ⟲ ⟳',3500);return}setAngle(p,0);
+ if(anc.step!=='lat'){anc.step='lat';const d=p.f.c[0]-p.lon;G3.offsetLon(-d);for(const q of parked)q.lon=((q.lon+d+540)%360)-180;
+  say('Now slide it up or down into the outline ↕',3500);}}
+function ancDown(e){if(!anc||anc.p.ov!==e.currentTarget&&e.currentTarget!==hdl)return;e.preventDefault();e.stopPropagation();const p=anc.p,st=anc.step;if(st==='blink')return;
+ const el=e.currentTarget;el.setPointerCapture(e.pointerId);const cx=p.sx,cy=p.sy,d0=Math.hypot(e.clientX-cx,e.clientY-cy)||1,s0=p.s,a0=p.angle,t0=Math.atan2(e.clientY-cy,e.clientX-cx);
+ el.onpointermove=ev=>{if(st==='scale')p.s=Math.max(.05,Math.min(8,s0*Math.hypot(ev.clientX-cx,ev.clientY-cy)/d0));
+  else if(st==='rot')setAngle(p,a0+(Math.atan2(ev.clientY-cy,ev.clientX-cx)-t0)*R2D);
+  else if(st==='lat'){const ll=G3.pick(cx,ev.clientY);if(ll)p.lat=Math.max(-85,Math.min(85,ll[1]));}};
+ el.onpointerup=el.onpointercancel=()=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;checkAnc();};}
+function checkAnc(){const p=anc.p;if(anc.step==='scale'&&Math.abs(p.s-1)<=.12){p.s=1;play('place');nextStep();}
+ else if(anc.step==='rot'&&Math.abs(angOff(p.angle))<=10){setAngle(p,0);play('place');nextStep();}
+ else if(anc.step==='lat'&&Math.abs(p.lat-p.f.c[1])<=Math.max(2,p.f.rad*R2D*.3)){const q=p;anc=null;aui.innerHTML='';hdl.style.display='none';unpark(q);place(q);}}
+const hdl=document.createElement('div');hdl.id='hdl';hdl.style.display='none';document.body.appendChild(hdl);hdl.addEventListener('pointerdown',ancDown);
+let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const x=p.sx,y=p.sy,R=p.spx;let h='';
+ if(st==='scale'){const out=p.s<1,a=R*.75+14;for(const [dx,dy] of [[1,1],[-1,1],[1,-1],[-1,-1]]){const x1=x+dx*a*.62,y1=y+dy*a*.62,x2=x+dx*(a*.62+16),y2=y+dy*(a*.62+16);const [fx,fy,tx,ty]=out?[x1,y1,x2,y2]:[x2,y2,x1,y1];
+   h+=`<line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" marker-end="url(#ah)"/>`;}
+  hdl.style.display='';hdl.style.left=(x+R*.72)+'px';hdl.style.top=(y+R*.72)+'px';}else hdl.style.display='none';
+ if(st==='rot'){const a=R+16;const cw=angOff(p.angle)<0;for(const sd of [-1,1]){const y1=y-a*.55,y2=y+a*.55,xx=x+sd*a;
+   const [ya,yb]=(sd>0)===cw?[y1,y2]:[y2,y1];h+=`<path d="M${x+sd*a*.84} ${ya} Q${xx+sd*a*.25} ${y} ${x+sd*a*.84} ${yb}" marker-end="url(#ah)"/>`;}}
+ if(st==='lat'){const f=p.f;if(G3.facing(f.c[0],f.c[1])){const [ox,oy]=G3.project(f.c[0],f.c[1]);const sc=G3.screenRadius(),pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(sc).translate([ox,oy]).clipAngle(90);
+   h+=`<path class="ol" d="${d3.geoPath(pr)(f)}"/>`;const dy=oy-y;if(Math.abs(dy)>R*.5)h+=`<line x1="${x}" y1="${y+Math.sign(dy)*(R*.6)}" x2="${x}" y2="${y+Math.sign(dy)*(R*.6+22)}" marker-end="url(#ah)"/>`;}}
+ aui.innerHTML='<defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker></defs>'+h;}
+function fits(p,ll){const f=p.f,easy=$('easy').checked,small=f.rad<0.12;let tol=Math.max(0.09,f.rad*0.9);if(easy&&small)tol=Math.max(tol,0.25);
+ if(!(d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll)))return false;if(Math.abs(angOff(p.angle))>25&&!(easy&&small))return false;
+ const nb=neigh[f.name]||[];return !nb.length||nb.some(n=>placed.has(n))||![...nb].some(n=>pieces.some(q=>q.f.name===n));}
+function joinParked(){let again=true;while(again){again=false;for(const q of [...parked]){if(anc&&anc.p===q)continue;if(fits(q,[q.lon,q.lat])){unpark(q);place(q,true);again=true;}}}}
+function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||x>r.right||y<r.top||y>r.bottom)?null:G3.pick(x,y);
+ if(!ll){if(p.parked){unpark(p);renderTray();}return;}
+ if(anc&&anc.p===p)return;
+ if(placed.size===0&&!anc){startAnchor(p,ll);return;}
+ if(placed.size===0){park(p,ll,p.parked?p.s:boxScale(p.f));say('Parked. Finish the anchor first ⚓',2000);return;}
+ if(fits(p,ll)){unpark(p);place(p);return;}
+ park(p,ll,1);say(neighbourHint(p,ll),2200);}
+function neighbourHint(p,ll){const f=p.f,tol=Math.max(0.09,f.rad*0.9);return (d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll))&&Math.abs(angOff(p.angle))>25?'Right place! Now turn it to fit ⟲ ⟳':'Parked here. It joins when the puzzle reaches it.';}
+function place(p,inJoin){placed.add(p.f.name);G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);if(!inJoin)joinParked();}
 function progress(){updScreen();$('progress').textContent=`${placed.size} / ${pieces.length}`;}
 // flag + tube
 function celebrate(n){const fl=FLAGS[n];const pop=$('flagPop');if(!fl){showCard(n);return;}$('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
@@ -126,7 +171,7 @@ $('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl'
   const b=d3.geoBounds(f);f.rad=Math.max(d3.geoDistance(f.c,b[0]),d3.geoDistance(f.c,b[1]))/1.6;if(n=="Antarctica"){f.c=[0,-90];f.rad=.5;}feats.push(f);byName[n]=f;}
  for(const n in groups){const s=new Set();groups[n].forEach(i=>nb[i].forEach(j=>{const m=merge[geoms[j].properties.name]||geoms[j].properties.name;if(m!=n)s.add(m)}));neigh[n]=[...s];}
  wtReady.then(()=>{buildSet();window.__ready=true;});});
-window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
+window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={get anc(){return anc},get parked(){return parked},get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
 // ---- placed-countries screen: one borderless translucent panel, stacked thin tabs, pointer line to the country ----
 var scr=document.createElement('div');scr.id='scr';scr.innerHTML='<div class="sh">Placed</div><div id="scrL"></div>';$('stage').appendChild(scr);
 const ptr=document.createElementNS('http://www.w3.org/2000/svg','svg');ptr.id='ptr';ptr.innerHTML='<line/><circle r="2.5"/><text/>';document.body.appendChild(ptr);
