@@ -51,7 +51,7 @@ LONf,LATf=grid(TW,TH);cu_=(LONf-C0)/(C1-C0);cv_=(LATf-A0)/(A1-A0);cd_=np.minimum
 wgt=np.clip(cd_/.3,0,1);wgt=wgt*wgt*(3-2*wgt)
 rcs=cv2.resize(rc,(j1-j0,i1-i0),interpolation=cv2.INTER_AREA);blk=img[i0:i1,j0:j1];w_=wgt[i0:i1,j0:j1,None]*sl[...,None]
 img[i0:i1,j0:j1]=blk*(1-w_)+rcs*w_
-img=np.clip(img,0,255);img[~land]=[30,60,80];print("img ok")
+img=np.clip(img,0,255);_,(ii,jj)=nd.distance_transform_edt(~land,return_indices=True);img=img[ii,jj];del ii,jj;print("img ok")
 Image.fromarray(img.astype(np.uint8)).save('../../brazil-showcase/rio_sc.jpg',quality=88)
 # organic radial masks (same formula in GLSL): e=|(LL-ctr)/half|+k*nz
 nz=lambda lo,la:.5*np.sin(lo*7.1+la*3.3)+.3*np.sin(-lo*4.3+la*9.7+1.3)+.2*np.sin(lo*13.+la*11.+2.)
@@ -61,16 +61,17 @@ SB=[LO0,LO1,LA0,LA1];CB=[C0,C1,A0,A1]
 AW=2048;AH=int(AW*TH/TW);LON,LAT=grid(AW,AH)
 cityA=1-ss(.6,.95,ell(LON,LAT,CB,.1))
 la=cv2.resize(land.astype(np.float32),(AW,AH),interpolation=cv2.INTER_AREA)
-al=(1-ss(.5,.97,ell(LON,LAT,SB,.12)))*(1-cityA)*ss(.35,.65,la)
+al=(1-ss(.5,.97,ell(LON,LAT,SB,.12)))*(1-cityA)*ss(.6,.9,la)
 Image.fromarray((np.clip(al,0,1)*255).astype(np.uint8)).save('../../brazil-showcase/rio_sa.png')
 # city feather map over city bbox (+ land only, so tile water never renders)
 FW=1024;FH=int(FW*rc.shape[0]/rc.shape[1]);lon=C0+(np.arange(FW)+.5)/FW*(C1-C0);lat=A1-(np.arange(FH)+.5)/FH*(A1-A0);CL,CA=np.meshgrid(lon,lat)
 wl=cv2.resize((rw<128).astype(np.float32),(FW,FH),interpolation=cv2.INTER_AREA)
-fa=(1-ss(.6,.95,ell(CL,CA,CB,.1)))*ss(.3,.7,wl)
+fa=(1-ss(.6,.95,ell(CL,CA,CB,.1)))*ss(.75,.98,wl)
 Image.fromarray((np.clip(fa,0,1)*255).astype(np.uint8)).save('../../brazil-showcase/rio_fa.png')
 GW=1400;GH=int(GW*KZ/KX);eg=cv2.resize(el.astype(np.float32),(GW,GH),interpolation=cv2.INTER_AREA)
 lg=cv2.resize(land.astype(np.float32),(GW,GH),interpolation=cv2.INTER_AREA)>.5
 eg=np.where(lg,np.maximum(eg,.5),np.minimum(eg,-2)*.35)
 np.clip((eg+60)*50,0,65535).astype(np.uint16).tofile('../../brazil-showcase/rio_sh.bin')
 json.dump(dict(GW=GW,GH=GH,U=.00016,bbox=[LO0,LO1,LA0,LA1]),open('../../brazil-showcase/rio_smeta.json','w'))
+rcw=cv2.resize(rw,(rc.shape[1],rc.shape[0]),interpolation=cv2.INTER_NEAREST)>=128;rcw=nd.binary_dilation(rcw,iterations=2);_,(ii,jj)=nd.distance_transform_edt(rcw,return_indices=True);Image.fromarray(rc[ii,jj].astype(np.uint8)).save('../../brazil-showcase/rio_c.jpg',quality=90)
 print(len(J),'tiles',TW,TH,GW,GH)

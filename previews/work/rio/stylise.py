@@ -19,23 +19,23 @@ def fbm(sc,oct=4,seed=0):
     w=max(2,int(TW/sc));h=max(2,int(TH/sc));o+=a*cv2.resize(r.random((h,w)).astype(np.float32),(TW,TH),interpolation=cv2.INTER_CUBIC);t+=a;a*=.5;sc/=2.2
   return o/t
 # --- field patchwork: anisotropic voronoi cells (~0.5-1 km) with hedgerow borders
-n=int(TW*TH/110);P=rng.random((n,2))*[TW,TH];ang=fbm(600,2,1)*3.0
+n=int(TW*TH/260);P=rng.random((n,2))*[TW,TH];ang=fbm(600,2,1)*3.0
 tree=cKDTree(P*[1,1.7]);fid=np.zeros((TH,TW),np.int32);bd=np.zeros((TH,TW),np.float32)
 yy,xx=np.mgrid[0:256,0:TW].astype(np.float32)
 for r0 in range(0,TH,256):
   h=min(256,TH-r0);q=np.stack([xx[:h].ravel(),(yy[:h]+r0).ravel()*1.7],1)
   d,i=tree.query(q,k=2,workers=8);fid[r0:r0+h]=i[:,0].reshape(h,TW);bd[r0:r0+h]=(d[:,1]-d[:,0]).reshape(h,TW)
-crop=np.array([[196,170,92],[160,158,70],[126,150,62],[150,112,70],[182,160,84],[108,140,58],[200,184,110],[140,128,66]],np.float32)
-past=np.array([[132,160,78],[118,150,70],[150,170,90],[108,138,64],[140,156,84]],np.float32)
+crop=np.array([[218,186,84],[178,176,64],[124,164,52],[164,112,64],[206,168,74],[96,150,48],[226,204,120],[150,134,58]],np.float32)
+past=np.array([[150,182,76],[118,160,62],[178,186,92],[100,146,58],[196,180,98],[134,170,70],[166,150,82]],np.float32)
 ck=rng.integers(0,len(crop),n);pk=rng.integers(0,len(past),n);tint=(rng.random(n)*.14+.93).astype(np.float32)
-hedge=1-np.exp(-bd/1.1)  # 0 at border
+hedge=np.clip((bd-.6)/1.4,0,1);hedge=hedge*hedge*(3-2*hedge)  # 0 at border
 cropC=crop[ck][fid]*tint[fid][...,None];pastC=past[pk][fid]*tint[fid][...,None]
 # subtle furrow stripes inside crop fields (direction per field)
 fa_=(rng.random(n)*np.pi).astype(np.float32)[fid];Y_,X_=np.mgrid[0:TH,0:TW].astype(np.float32)
 stripe=.5+.5*np.sin((X_*np.cos(fa_)+Y_*np.sin(fa_))*2.2);del X_,Y_,fa_
 cropC*=(.94+.08*stripe)[...,None]
-hedgeC=np.array([62,92,44],np.float32)
-cropC=cropC*hedge[...,None]+hedgeC*(1-hedge[...,None]);pastC=pastC*(.6+.4*hedge[...,None])+hedgeC*(.4-.4*hedge[...,None])
+hedgeC=np.array([70,100,48],np.float32)
+cropC=cropC*hedge[...,None]+hedgeC*(1-hedge[...,None]);pastC=pastC*hedge[...,None]+hedgeC*(1-hedge[...,None])
 # --- forest: lush stylised canopy clumps
 f1=fbm(TW/3,3,2);f2=fbm(TW/9,2,3)
 clump=np.clip((f1-.35)*2.2,0,1)
@@ -55,12 +55,25 @@ out/=np.maximum(ws,1e-3)[...,None];
 miss=ws<.05;out[miss]=col[miss]
 # painterly light: warm lit / cool shade, soft AO
 lit=np.clip(hs,0,1)[...,None];warm=np.array([1.06,1.02,.92],np.float32);cool=np.array([.78,.84,1.0],np.float32)
-out=out*(cool+(warm-cool)*lit)*(.70+.40*lit)*ao[...,None]
+fl=nd.gaussian_filter(np.isin(cls,[30,40,100]).astype(np.float32),2)[...,None];lit2=lit*(1-.55*fl)+.62*.55*fl
+out=out*(cool+(warm-cool)*lit2)*(.70+.40*lit2)*ao[...,None]
 # altitude tint: higher ground slightly cooler/greyer (serra)
 hi=np.clip((el-900)/900,0,1)[...,None];g_=out.mean(2,keepdims=True);out=out*(1-.3*hi)+g_*.3*hi
-out=cv2.bilateralFilter(np.clip(out,0,255).astype(np.uint8),5,18,3).astype(np.float32)
+out=cv2.bilateralFilter(np.clip(out,0,255).astype(np.uint8),3,10,2).astype(np.float32)
 # fade style toward the Brazil host map at the outer ring so the ellipse edge is invisible
 LONs,LATs=grid(TW,TH);eo=np.hypot((LONs-(LO0+LO1)/2)/((LO1-LO0)/2),(LATs-(LA0+LA1)/2)/((LA1-LA0)/2))
 wst=(1-np.clip((eo-.55)/.4,0,1))[...,None];base=col*(.72+.38*lit)*ao[...,None]
 img=out*wst+base*(1-wst);del out,base,LONs,LATs,eo
 np.save('/tmp/cls.npy',cls)
+
+rs=np.random.default_rng(11);LONs,LATs=grid(TW,TH)
+_nz=.5*np.sin(LONs*7.1+LATs*3.3)+.3*np.sin(-LONs*4.3+LATs*9.7+1.3)+.2*np.sin(LONs*13.+LATs*11.+2.)
+cityE=np.hypot((LONs-(C0+C1)/2)/((C1-C0)/2),(LATs-(A0+A1)/2)/((A1-A0)/2))+.1*_nz;regE=np.hypot((LONs-(LO0+LO1)/2)/((LO1-LO0)/2),(LATs-(LA0+LA1)/2)/((LA1-LA0)/2))
+ok=(cityE>.8)&(regE<.8)&land
+def pick(m,N):
+  idx=np.flatnonzero(m.ravel());idx=rs.choice(idx,min(N,len(idx)),replace=False);j,i=np.unravel_index(idx,m.shape)
+  lo=LONs[j,i]+(rs.random(len(j))-.5)*(LO1-LO0)/TW;la=LATs[j,i]+(rs.random(len(j))-.5)*(LA1-LA0)/TH
+  return np.stack([lo,la],1).astype(np.float32)
+trees=pick(ok&(cls==10)&(nd.binary_erosion(cls==10,iterations=1)),180000);houses=pick(ok&(cls==50),90000)
+trees.tofile('../../brazil-showcase/rio_trees.bin');houses.tofile('../../brazil-showcase/rio_houses.bin');print('inst',len(trees),len(houses))
+del LONs,LATs,cityE,regE,ok

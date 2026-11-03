@@ -23,11 +23,14 @@ export async function loadCity(base,prefix,o={}){
  const tm=mk({map:tc,normalMap:tn,normalScale:new THREE.Vector2(.6,.6),roughness:.92,alphaMap:am});
  const terr=new THREE.Mesh(tg,tm);terr.receiveShadow=shadows;G.add(terr);
  // optional surround: lower-res relief tile around the city, feathered into the host map
- let sur=null;if(o.surround){try{const SM=await (await fetch(base+prefix+'smeta.json')).json();const sq=new Uint16Array(await ab(base+prefix+'sh.bin'));
+ let sur=null,sAt=null,inst=null;if(o.surround){try{const SM=await (await fetch(base+prefix+'smeta.json')).json();const sq=new Uint16Array(await ab(base+prefix+'sh.bin'));
   const cl=(LO0+LO1)/2,ca=(LA0+LA1)/2,kx=Math.cos(ca*Math.PI/180)*11.132,kz=11.06,[s0,s1,a0,a1]=SM.bbox;
   const sg=new THREE.PlaneGeometry(1,1,SM.GW-1,SM.GH-1);const sp=sg.attributes.position;
   for(let j=0;j<SM.GH;j++)for(let i=0;i<SM.GW;i++){const k=j*SM.GW+i;const lo=s0+(i+.5)/SM.GW*(s1-s0),la=a1-(j+.5)/SM.GH*(a1-a0);
    const x=(lo-cl)*kx,z=(ca-la)*kz;sp.setXYZ(k,x,(sq[k]/50-60)*SM.U-.00002-(x*x+z*z)/1274.2,z)}
+  sAt=(x,z)=>{const lo=x/kx+cl,la=ca-z/kz;const fx=Math.min(SM.GW-1.001,Math.max(0,(lo-s0)/(s1-s0)*SM.GW-.5)),fz=Math.min(SM.GH-1.001,Math.max(0,(a1-la)/(a1-a0)*SM.GH-.5));const i=fx|0,j=fz|0,a=fx-i,b=fz-j,k=j*SM.GW+i,h=v=>(sq[v]/50-60)*SM.U;
+   return h(k)*(1-a)*(1-b)+h(k+1)*a*(1-b)+h(k+SM.GW)*(1-a)*b+h(k+SM.GW+1)*a*b-.00002-(x*x+z*z)/1274.2};
+  if(o.instances)try{inst=await buildInst(base+prefix,(lo,la)=>[(lo-cl)*kx,(ca-la)*kz],sAt,root,disp)}catch(e){console.warn('inst',e)}
   sg.computeVertexNormals();disp.push(sg);const [sc,sa]=await Promise.all([ld('sc.jpg'),ld('sa.png')]);sc.colorSpace=THREE.SRGBColorSpace;sc.anisotropy=8;disp.push(sc,sa);
   const sm=mk({map:sc,alphaMap:sa,roughness:.95});sm.alphaHash=true;sur=new THREE.Mesh(sg,sm);sur.renderOrder=-1;root.add(sur);sur.userData={bbox:SM.bbox,tex:sc}}catch(e){console.warn('surround',e)}}
  // living water: depth-graded colour, animated normals, foam only along beaches
@@ -105,7 +108,32 @@ export async function loadCity(base,prefix,o={}){
    const cg=new THREE.CircleGeometry(.0085,32);disp.push(cg);const f=new THREE.Mesh(cg,mk({color:0x4f8a3e}));f.rotation.x=-Math.PI/2;f.scale.set(1.15,.85,1);f.position.set(x,hAt(x,z)+.0003,z);detail.add(f)}}
  const setFade=(a,dA=a)=>{for(const m of mats)m.opacity=a;WU.fade.value=a;detail.traverse(o=>{if(o.material&&o.material.alphaHash!==undefined){}});detail.visible=dA>.01;
   if(detail.visible)detail.traverse(o=>{if(o.isMesh)o.material.opacity=dA});terr.visible=wat.visible=a>.01};
- return {root,meta:M,tex:tc,sur,hAt:(x,z)=>hAt(x+WX/2,z+HZ/2),ll:(lo,la)=>{const[x,z]=ll(lo,la);return[x-WX/2,z-HZ/2]},detail,
+ return {root,sAt,inst,meta:M,tex:tc,sur,hAt:(x,z)=>hAt(x+WX/2,z+HZ/2),ll:(lo,la)=>{const[x,z]=ll(lo,la);return[x-WX/2,z-HZ/2]},detail,
   tick:t=>{WU.t.value=t},setFade,setSun:v=>WU.sun.value.copy(v),
   dispose:()=>{for(const d of disp)d.dispose&&d.dispose();root.traverse(o=>{if(o.isInstancedMesh)o.dispose()});root.removeFromParent()}};
 }
+
+// Region instances: low-poly stylised trees + small houses, chunked for LOD/activity culling
+async function buildInst(pf,toXZ,sAt,root,disp){
+ const [tb,hb]=await Promise.all([ab(pf+'trees.bin'),ab(pf+'houses.bin')]);
+ const NC=12,chunks=[];const grp=new THREE.Group();root.add(grp);
+ const tg=new THREE.ConeGeometry(.0019,.005,7);tg.translate(0,.0028,0);const tk=new THREE.CylinderGeometry(.0003,.0003,.0008,4);tk.translate(0,.0004,0);
+ const hg=new THREE.BoxGeometry(.0024,.0014,.0018);hg.translate(0,.0007,0);const rg=new THREE.ConeGeometry(.00185,.0011,4);rg.rotateY(Math.PI/4);rg.scale(1,1,.78);rg.translate(0,.00195,0);
+ const mt=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.9,flatShading:true}),mk2=new THREE.MeshStandardMaterial({color:0x6b4a2e,roughness:1}),
+  mw=new THREE.MeshStandardMaterial({color:0xe9dcc4,roughness:.9}),mr=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,flatShading:true});
+ disp.push(tg,tk,hg,rg,mt,mk2,mw,mr);
+ const tC=[[.16,.36,.14],[.2,.42,.16],[.13,.31,.12],[.24,.45,.18],[.18,.38,.2]].map(c=>new THREE.Color(...c)),rC=[[.62,.27,.17],[.55,.24,.16],[.68,.36,.22],[.5,.3,.22]].map(c=>new THREE.Color(...c));
+ const M4=new THREE.Matrix4(),Q=new THREE.Quaternion(),Y=new THREE.Vector3(0,1,0),P=new THREE.Vector3(),Sc=new THREE.Vector3();
+ function add(buf,kind){const a=new Float32Array(buf),n=a.length/2,xs=new Float32Array(n),zs=new Float32Array(n);let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9;
+  for(let i=0;i<n;i++){const [x,z]=toXZ(a[2*i],a[2*i+1]);xs[i]=x;zs[i]=z;x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z)}
+  const bins=new Map();for(let i=0;i<n;i++){const k=Math.min(NC-1,((xs[i]-x0)/(x1-x0+1e-9)*NC)|0)+NC*Math.min(NC-1,((zs[i]-z0)/(z1-z0+1e-9)*NC)|0);(bins.get(k)||bins.set(k,[]).get(k)).push(i)}
+  for(const [k,ids] of bins){let cx=0,cz=0;for(const i of ids){cx+=xs[i];cz+=zs[i]}cx/=ids.length;cz/=ids.length;
+   const g=new THREE.Group();g.visible=false;grp.add(g);
+   // lazy LOD build: matrices are only created the first time the chunk comes into view
+   const build=()=>{const K=kind==='t'?4:2,N=ids.length*K,meshes=kind==='t'?[new THREE.InstancedMesh(tg,mt,N)]:[new THREE.InstancedMesh(hg,mw,N),new THREE.InstancedMesh(rg,mr,N)];let j=0;
+    for(const i of ids)for(let q=0;q<K;q++){const r1=Math.sin(i*12.9898+q*78.233)*43758.5453%1,r2=Math.sin(i*39.346+q*11.135)*24634.6345%1;const ox=q?r1*(kind==='t'?.0045:.004):0,oz=q?r2*(kind==='t'?.0045:.004):0;
+     const x=xs[i]+ox,z=zs[i]+oz,s=(kind==='t'?.8:.7)+Math.abs(r1)*.6;Q.setFromAxisAngle(Y,(i*2.39996+q)%6.283);P.set(x,sAt(x,z)-.0002,z);Sc.set(s,s*(kind==='t'?.8+Math.abs(r2)*.5:1),s);M4.compose(P,Q,Sc);
+     for(const m of meshes)m.setMatrixAt(j,M4);meshes[0].setColorAt(j,kind==='t'?tC[(i+q)%tC.length]:new THREE.Color(.92,.87,.78));if(kind==='h')meshes[1].setColorAt(j,rC[(i+q)%rC.length]);j++}
+    for(const m of meshes){m.frustumCulled=false;g.add(m);disp.push(m)}};
+   chunks.push({g,kind,build,built:false,c:new THREE.Vector3(cx,sAt(cx,cz),cz),r:Math.max(x1-x0,z1-z0)/NC*.75})}}
+ add(tb,'t');add(hb,'h');return {grp,chunks,count:new Float32Array(tb).length/2+new Float32Array(hb).length/2}}
