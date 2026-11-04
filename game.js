@@ -73,7 +73,7 @@ function select(p){sel=p;document.querySelectorAll('.piece').forEach(x=>x.classL
 let drag=null,ghost=null;
 function updateGhostShape(){if(!drag)return;const sr=Math.max(G3.screenRadius(),1),gs=drag.p.parked?drag.p.s:placed.size?1:boxScale(drag.p.f);const g=shapeSVG(drag.p.f,sr*gs);ghost.innerHTML=g.svg;let sv=ghost.firstChild,sz=2*g.r;
  if(sz<34){sv.setAttribute('width',34);sv.setAttribute('height',34);sz=34;}drag.half=sz/2;sv.style.transform=`rotate(${drag.p.angle}deg)`;moveGhost(drag.x,drag.y);}
-function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left=(x-drag.half)+'px';ghost.style.top=(y-drag.half)+'px';}
+function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left='0px';ghost.style.top='0px';ghost.style.transform=`translate3d(${x-drag.half}px,${y-drag.half}px,0)`;}
 function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.pointerId);drag={p,el,x:e.clientX,y:e.clientY,moved:false};
  ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);ghost.style.display='none';updateGhostShape();
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
@@ -195,7 +195,7 @@ function drawPtr(){const f=byName[hot];if(!f)return;const c=d3.geoCentroid(f);
  if(!G3.facing(c[0],c[1])){ptr.style.display='none'}else{const [x,y]=G3.project(c[0],c[1]);const ty=y-46;ptr.style.display='block';
   const [l,ci,tx]=ptr.children;l.setAttribute('x1',x);l.setAttribute('y1',y);l.setAttribute('x2',x);l.setAttribute('y2',ty+4);ci.setAttribute('cx',x);ci.setAttribute('cy',y);tx.setAttribute('x',x);tx.setAttribute('y',ty);tx.textContent=hot;}
  hotRaf=requestAnimationFrame(drawPtr);}
-(function hook(){if(!window.G3)return setTimeout(hook,200);G3.dom.addEventListener('pointermove',e=>{if(e.buttons||!placed.size)return;const ll=G3.pick(e.clientX,e.clientY);let n=null;  if(ll)for(const k of placed)if(d3.geoContains(byName[k],ll)){n=k;break}setHot(n);}); G3.dom.addEventListener('pointerleave',()=>setHot(null)); })();
+(function hook(){if(!window.G3)return setTimeout(hook,200);let hq=null,hr=0;G3.dom.addEventListener('pointermove',e=>{if(e.buttons||!placed.size||drag||G3.grabbing())return;hq=[e.clientX,e.clientY];if(hr)return;hr=requestAnimationFrame(()=>{hr=0;if(drag)return;const ll=G3.pick(hq[0],hq[1]);let n=null;if(ll)for(const k of placed)if(d3.geoContains(byName[k],ll)){n=k;break}setHot(n);});}); G3.dom.addEventListener('pointerleave',()=>setHot(null)); })();
 window.__game.hot=setHot;
 // ---- sliding drawers + stack ----
 // Two full-height wooden drawers slide in from the screen edges as overlays. They meet in the middle; pulling one further
@@ -247,7 +247,7 @@ function collide(a,c){const A=bodyShape(a.p),C=bodyShape(c.p),dx=c.x-a.x,dy=c.y-
  for(const ha of A.hs)for(const hc of C.hs){const m=satMTV(ha,a.x,a.y,hc,c.x,c.y);if(!m)continue;hit=true;const s=Math.min(m.d,6)*.5;c.x+=m.nx*s;c.y+=m.ny*s;a.x-=m.nx*s;a.y-=m.ny*s;
   const rv=(c.vx-a.vx)*m.nx+(c.vy-a.vy)*m.ny;if(rv<0){const j=-rv*.6;c.vx+=m.nx*j;c.vy+=m.ny*j;a.vx-=m.nx*j;a.vy-=m.ny*j;}}return hit;}
 function clampB(o,b){const r=bounds(o,b),S=bodyShape(b.p);if(b.x+S.x0<r.x){b.x=r.x-S.x0;b.vx=Math.abs(b.vx)*.3}if(b.x+S.x1>r.x+r.w){b.x=r.x+r.w-S.x1;b.vx=-Math.abs(b.vx)*.3}if(b.y+S.y0<r.y){b.y=r.y-S.y0;b.vy=Math.abs(b.vy)*.3}if(b.y+S.y1>r.y+r.h){b.y=r.y+r.h-S.y1;b.vy=-Math.abs(b.vy)*.3}}
-let raf=0;function kick(){if(!raf)raf=requestAnimationFrame(step);}
+let raf=0,calm=0,budget=0;function kick(){budget=performance.now()+2500;if(!raf)raf=requestAnimationFrame(step);}function tick(){if(!raf)raf=requestAnimationFrame(step);}
 function step(){raf=0;let busy=false;const W=innerWidth;
  for(const s in DR){const o=DR[s];if(o.glide){setOpen(o,o.open+o.glide);o.glide*=.86;if(Math.abs(o.glide)<.3||o.open<=0||o.open>=W)o.glide=0;}
   if(o.open<24&&!o.h.onpointermove&&!o.glide&&o.open>0)o.open=Math.max(0,o.open-4);
@@ -259,9 +259,9 @@ function step(){raf=0;let busy=false;const W=innerWidth;
    if(b.z>0||b.vz){b.vz-=1.6;b.z+=b.vz;if(b.z<=0){b.z=0;if(b.vz<-5){b.vz=-b.vz*.38;knock(Math.min(.25,-b.vz*.02+.04),380+Math.random()*120)}else b.vz=0;}}
    b.vx*=.9;b.vy*=.9;b.x+=b.vx;b.y+=b.vy;clampB(o,b);}
   for(let it=0;it<3;it++){let any=false;for(let i=0;i<B.length;i++)for(let j=i+1;j<B.length;j++){const a=B[i],c=B[j];if(a.sec!==c.sec||a.z>8||c.z>8)continue;if(collide(a,c))any=true;}for(const b of B)clampB(o,b);if(!any)break;}
-  for(const b of B){if(Math.abs(b.vx)+Math.abs(b.vy)>.05||b.z>0)busy=true;b.el.style.transform=`translate(${b.x-PS/2}px,${b.y-PS/2-b.z}px) scale(${1+b.z*.006})`;b.el.style.zIndex=b.z>0?5:1;}}
+  for(const b of B){if(Math.abs(b.vx)+Math.abs(b.vy)>.25||b.z>0||b.vz)busy=true;const tf=`translate3d(${(b.x-PS/2).toFixed(1)}px,${(b.y-PS/2-b.z).toFixed(1)}px,0)`+(b.z>0?` scale(${1+b.z*.006})`:''),zi=b.z>0?5:1;if(b._tf!==tf){b.el.style.transform=tf;b._tf=tf;}if(b._zi!==zi){b.el.style.zIndex=zi;b._zi=zi;}}}
  if(Math.abs(DR.L.v)<.05&&Math.abs(DR.R.v)<.05&&roll)roll.g.gain.setTargetAtTime(0,DAC.currentTime,.05);
- if(busy)kick();}
+ const live=busy&&(performance.now()<budget||[DR.L,DR.R].some(o=>o.glide||o.h.onpointermove||Math.abs(o.v)>.05));if(live){calm=0;tick();}else if(++calm<10)tick();else{calm=0;for(const s in DR)for(const b of DR[s].bodies){b.vx=b.vy=0;}}}
 // which drawer (and where in it) is under a screen point
 function drawerAt(x,y){const W=innerWidth;if(DR.L.open>0&&x<DR.L.open)return {side:'L',x:x+W-DR.L.open,y};if(DR.R.open>0&&x>W-DR.R.open)return {side:'R',x:x-(W-DR.R.open),y};return null;}
 function secAt(lx,ly){const r=secRects().find(r=>lx>=r.x&&lx<r.x+r.w&&ly>=r.y&&ly<r.y+r.h);return r?r.c:null;}

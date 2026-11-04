@@ -3,18 +3,19 @@
 import * as THREE from 'three';
 import {OrbitControls} from './previews/brazil/OrbitControls.js';import {loadCity} from './previews/lib/city.js';import {CITIES} from './previews/lib/cities.js';
 const P='previews/brazil/';
-const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});R.setPixelRatio(Math.min(2,devicePixelRatio));
+const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});R.setPixelRatio(Math.min(1.5,devicePixelRatio));
 R.toneMapping=THREE.ACESFilmicToneMapping;R.domElement.id='globe';host.prepend(R.domElement);
 const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(40,1,.01,200);C.position.set(0,.6,6.2);
 const O=new OrbitControls(C,R.domElement);O.enableDamping=true;O.enablePan=false;O.minDistance=2.2;O.maxDistance=12;
 const sun=new THREE.Vector3(-.6,.5,.65).normalize();S.add(new THREE.AmbientLight(0xffffff,.22));const dl=new THREE.DirectionalLight(0xfff2e0,2.2);dl.position.copy(sun).multiplyScalar(10);S.add(dl);
-const U={t:{value:0},bg:{value:0},sun:{value:sun}};
+const SKY=new THREE.Vector3(-.2,.2,-.96).normalize();// sky sun: in view, behind/left of the globe
+const U={t:{value:0},bg:{value:0},sun:{value:sun},ss:{value:SKY}};
 const NO=`float h(vec3 p){p=fract(p*.3183099+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
 float n(vec3 x){vec3 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);return mix(mix(mix(h(i),h(i+vec3(1,0,0)),f.x),mix(h(i+vec3(0,1,0)),h(i+vec3(1,1,0)),f.x),f.y),mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z);}
 float fb(vec3 p){float a=.5,s=0.;for(int i=0;i<6;i++){s+=a*n(p);p*=2.03;a*=.5;}return s;}`;
 const bg=new THREE.Mesh(new THREE.SphereGeometry(100,64,32),new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,uniforms:U,
 vertexShader:`varying vec3 d;void main(){d=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-fragmentShader:NO+`uniform float bg;uniform vec3 sun;uniform vec3 pl[6];uniform float po[6];varying vec3 d;
+fragmentShader:NO+`uniform float bg;uniform vec3 sun,ss;uniform vec3 pl[6];uniform float po[6];varying vec3 d;
 float stars(vec3 d,float s,float th){vec3 p=d*s;vec3 i=floor(p);float r=h(i);vec3 c=i+.5+.35*(vec3(h(i+3.1),h(i+7.7),h(i+1.3))-.5);float k=length(p-c);return r>th?smoothstep(.12,0.,k)*(r-th)/(1.-th):0.;}
 void main(){vec3 c;
 if(bg<.5){vec3 g=normalize(vec3(.3,1.,.2));float b=abs(dot(d,g));float band=exp(-b*b*18.);float dust=fb(d*6.);
@@ -24,12 +25,12 @@ else if(bg<2.5){c=mix(vec3(.02,.02,.025),vec3(.16,.15,.14),pow(1.-abs(d.y),3.));
 else if(false){float y=d.y;float s=max(dot(d,normalize(vec3(.7,.02,-.7))),0.);c=mix(vec3(.95,.55,.3),vec3(.08,.16,.35),smoothstep(-.02,.45,y));c+=pow(s,60.)*vec3(1.,.8,.5)*2.+pow(s,6.)*vec3(.5,.25,.1);if(y<0.)c=mix(vec3(.05,.05,.07),c,exp(y*30.));c+=stars(d,300.,.97)*smoothstep(.3,.8,y);}
 c+=stars(d,420.,.985)*.5;
 // distant solar system: faint orbit rings in a plane through the sun, planets as small discs
-vec3 sp=sun*60.,nn=normalize(vec3(.15,1.,.25));float t=dot(sp,nn)/dot(d,nn);
+vec3 sp=ss*60.,nn=normalize(vec3(.15,1.,.25));float t=dot(sp,nn)/dot(d,nn);
 if(t>0.){vec3 X=d*t-sp;float rho=length(X);for(int i=0;i<6;i++){float ring=1.-smoothstep(0.,.05+.004*t/60.,abs(rho-po[i]));c+=ring*vec3(.3,.36,.48)*.32;}}
 for(int i=0;i<6;i++){float a=acos(clamp(dot(d,normalize(pl[i])),-1.,1.));c+=smoothstep(.0035,.0015,a)*vec3(.9,.8,.7)*.9+smoothstep(.02,0.,a)*.04;}
-float sa=acos(clamp(dot(d,sun),-1.,1.));c+=smoothstep(.03,.022,sa)*vec3(4.,3.6,3.)+vec3(1.,.8,.55)*(.35*exp(-sa*18.)+.08*exp(-sa*4.));
+float sa=acos(clamp(dot(d,ss),-1.,1.));c+=smoothstep(.03,.022,sa)*vec3(4.,3.6,3.)+vec3(1.,.8,.55)*(.35*exp(-sa*18.)+.08*exp(-sa*4.));
 gl_FragColor=vec4(c,1.);}`}));S.add(bg);
-{const sp=sun.clone().multiplyScalar(60),nn=new THREE.Vector3(.15,1,.25).normalize(),e1=new THREE.Vector3().crossVectors(nn,sp).normalize(),e2=new THREE.Vector3().crossVectors(nn,e1);
+{const sp=SKY.clone().multiplyScalar(60),nn=new THREE.Vector3(.15,1,.25).normalize(),e1=new THREE.Vector3().crossVectors(nn,sp).normalize(),e2=new THREE.Vector3().crossVectors(nn,e1);
  const rs=[3,5,7.5,11,16,22],ph=[.4,2.1,3.7,5.2,1.3,4.4];U.po={value:rs};U.pl={value:rs.map((r,i)=>sp.clone().addScaledVector(e1,r*Math.cos(ph[i])).addScaledVector(e2,r*Math.sin(ph[i])))};}
 const G=new THREE.Group();S.add(G);
 const ocean=new THREE.Mesh(new THREE.SphereGeometry(1.5,160,96),new THREE.ShaderMaterial({uniforms:U,

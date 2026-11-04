@@ -10,7 +10,7 @@ select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:p
 #msg{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#fff;color:#222;padding:6px 14px;border-radius:12px;font-weight:bold;display:none}
 #hints{width:230px;background:#1b3d6b;padding:8px;overflow-y:auto}#sel{min-height:40px;margin:6px 0}.hint{display:block;width:100%;margin:6px 0;background:#ffd34d;font-weight:bold}.hint:disabled{opacity:.4}
 #rot{display:flex;gap:8px}#rot button{flex:1;font-size:28px;padding:4px}#hintText{background:#0d2240;border-radius:8px;padding:6px;min-height:60px;font-size:15px}.tip{font-size:13px;opacity:.8}
-#ghost{position:fixed;pointer-events:none;z-index:9;opacity:.85}#ghost svg{filter:drop-shadow(0 6px 8px #000c)}
+#ghost{position:fixed;will-change:transform;pointer-events:none;z-index:9;opacity:.85}#ghost svg{filter:drop-shadow(0 6px 8px #000c)}
 #card{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:20}.cardIn{background:#fffbe9;color:#222;border-radius:18px;padding:18px 24px;max-width:420px;border:6px solid #ffd34d}
 .cardIn h2{margin:0 0 8px}.cardIn li{margin:6px 0;font-size:18px}#cOk{background:#2a9d4b;color:#fff;font-size:20px;width:100%}
 @media(max-width:800px){main{flex-direction:column}#tray{width:auto;height:auto;flex:none;overflow:hidden;border-right:0}#tray h2{font-size:14px;margin:2px 4px}#pieces{display:flex;overflow-x:auto;touch-action:pan-x}.piece{min-width:90px;touch-action:pan-x}#hints{width:auto;height:150px}#stage{min-height:0}.tip{display:none}}
@@ -81,5 +81,3 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 .dL .dh,#stack{background-image:url(wood_teal.jpg)}
 .dR .dh{background-image:url(wood_maple.jpg)}
 .dL .din:after{content:"";position:absolute;left:70px;right:70px;top:64px;bottom:96px;border-radius:14px;background:url(wood_teal.jpg) center/384px;filter:brightness(.82);box-shadow:inset 0 10px 22px #000a,inset 0 -3px 6px #fff3,inset 0 0 0 3px #0005,0 0 0 6px #ffffff1c,0 0 0 7px #0006;pointer-events:none;z-index:0}
-.dL .dp{z-index:1}
-.dL .din:after{background:url(tray_map.png) center/94% auto no-repeat,url(wood_teal.jpg) center/384px}
