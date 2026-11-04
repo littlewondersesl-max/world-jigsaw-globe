@@ -126,7 +126,7 @@ addEventListener('pointerdown',e=>{if(!anc||!['scale','rot'].includes(anc.step))
 addEventListener('pointermove',e=>{if(!TP.has(e.pointerId))return;TP.set(e.pointerId,[e.clientX,e.clientY]);if(!pin||!anc||TP.size<2)return;e.stopPropagation();const [a,b]=[...TP.values()],p=anc.p;
  if(anc.step==='scale')p.s=Math.max(.05,Math.min(8,pin.s*Math.hypot(b[0]-a[0],b[1]-a[1])/pin.d));else setAngle(p,pin.an+(Math.atan2(b[1]-a[1],b[0]-a[0])-pin.t)*R2D);},true);
 const tpUp=e=>{if(!TP.delete(e.pointerId))return;if(pin&&TP.size<2){pin=null;if(anc)checkAnc();}};addEventListener('pointerup',tpUp,true);addEventListener('pointercancel',tpUp,true);
-function checkAnc(){const p=anc.p;if(anc.step==='scale'&&Math.abs(p.s-1)<=.12){p.s=1;play('place');nextStep();}
+function checkAnc(){if(!anc)return;const p=anc.p;if(anc.step==='scale'&&Math.abs(p.s-1)<=.12){p.s=1;play('place');nextStep();}
  else if(anc.step==='rot'&&Math.abs(angOff(p.angle))<=10){setAngle(p,0);play('place');nextStep();}
  else if(anc.step==='lat'&&Math.abs(p.lat-p.f.c[1])<=Math.max(2,p.f.rad*R2D*.3)){const q=p;anc=null;aui.innerHTML='';G3.outline(null);hdl.style.display='none';unpark(q);place(q);}}
 const hdl=document.createElement('div');hdl.id='hdl';hdl.style.display='none';document.body.appendChild(hdl);hdl.addEventListener('pointerdown',ancDown);
@@ -228,7 +228,25 @@ function pieceEl(p){const e=document.createElement('div');e.className='dp';const
 function addBody(side,p,x,y,hop,sec){remBody(p);const o=DR[side],b={p,x,y,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,z:hop?28:0,vz:0,r:PS*.36,sec:side==='R'?(sec||contOf(p.f.name)):null};
  b.el=pieceEl(p);o.in.appendChild(b.el);o.bodies.push(b);p.dloc=side;p.body=b;clampB(o,b);kick();return b;}
 function remBody(p){const b=p.body;if(!b)return;for(const s in DR){const o=DR[s],i=o.bodies.indexOf(b);if(i>=0)o.bodies.splice(i,1);}b.el.remove();p.body=null;p.dloc=null;}
-function clampB(o,b){const r=bounds(o,b);if(b.x<r.x+b.r){b.x=r.x+b.r;b.vx=Math.abs(b.vx)*.3}if(b.x>r.x+r.w-b.r){b.x=r.x+r.w-b.r;b.vx=-Math.abs(b.vx)*.3}if(b.y<r.y+b.r){b.y=r.y+b.r;b.vy=Math.abs(b.vy)*.3}if(b.y>r.y+r.h-b.r){b.y=r.y+r.h-b.r;b.vy=-Math.abs(b.vy)*.3}}
+// real-shape collision: each piece is its projected outline, split into convex hulls of its main parts (SAT between hulls)
+function hullOf(P){P=P.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lo=[],up=[];
+ for(const p of P){while(lo.length>1&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}for(let i=P.length-1;i>=0;i--){const p=P[i];while(up.length>1&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
+ up.pop();lo.pop();return lo.concat(up);}
+function bodyShape(p){if(p._sh&&p._sh.a===p.angle)return p._sh;const sc=trayScale(p.f)*PS/86,pr=d3.geoOrthographic().rotate([-p.f.c[0],-p.f.c[1]]).scale(sc).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
+ const b=gp.bounds(p.f),r=Math.max(Math.abs(b[0][0]),Math.abs(b[0][1]),Math.abs(b[1][0]),Math.abs(b[1][1]))+3,k=PS/(2*r),an=p.angle*Math.PI/180,ca=Math.cos(an),sa=Math.sin(an);
+ const parts=(gp(p.f)||'').split('M').filter(Boolean).map(seg=>(seg.match(/-?[\d.]+(?:e-?\d+)?/g)||[]).map(Number)).map(n=>{const q=[];for(let i=0;i+1<n.length;i+=2){const x=n[i]*k,y=n[i+1]*k;q.push([x*ca-y*sa,x*sa+y*ca]);}return q;}).filter(q=>q.length>2);
+ let hs=parts.map(hullOf).filter(h=>h.length>2).map(h=>({h,a:Math.abs(h.reduce((s,p,i)=>{const q=h[(i+1)%h.length];return s+p[0]*q[1]-q[0]*p[1]},0))/2}));
+ const mx=Math.max(1,...hs.map(o=>o.a));hs=hs.filter(o=>o.a>mx*.08).sort((a,b)=>b.a-a.a).slice(0,4).map(o=>o.h);if(!hs.length)hs=[[[-8,-8],[8,-8],[8,8],[-8,8]]];
+ const all=hs.flat();p._sh={a:p.angle,hs,x0:Math.min(...all.map(v=>v[0])),x1:Math.max(...all.map(v=>v[0])),y0:Math.min(...all.map(v=>v[1])),y1:Math.max(...all.map(v=>v[1]))};
+ p._sh.r=Math.max(...all.map(v=>Math.hypot(v[0],v[1])));return p._sh;}
+function satMTV(A,ax,ay,Bh,bx,by){let best=1e9,nx=0,ny=0;for(const P of [A,Bh])for(let i=0;i<P.length;i++){const p=P[i],q=P[(i+1)%P.length];let ex=q[1]-p[1],ey=p[0]-q[0];const l=Math.hypot(ex,ey);if(!l)continue;ex/=l;ey/=l;
+  let a0=1e9,a1=-1e9,b0=1e9,b1=-1e9;for(const v of A){const d=(v[0]+ax)*ex+(v[1]+ay)*ey;if(d<a0)a0=d;if(d>a1)a1=d;}for(const v of Bh){const d=(v[0]+bx)*ex+(v[1]+by)*ey;if(d<b0)b0=d;if(d>b1)b1=d;}
+  const o=Math.min(a1-b0,b1-a0);if(o<=0)return null;if(o<best){best=o;nx=ex;ny=ey;}}
+ if((bx-ax)*nx+(by-ay)*ny<0){nx=-nx;ny=-ny;}return {d:best,nx,ny};}
+function collide(a,c){const A=bodyShape(a.p),C=bodyShape(c.p),dx=c.x-a.x,dy=c.y-a.y;if(dx*dx+dy*dy>(A.r+C.r)**2)return false;let hit=false;
+ for(const ha of A.hs)for(const hc of C.hs){const m=satMTV(ha,a.x,a.y,hc,c.x,c.y);if(!m)continue;hit=true;const s=Math.min(m.d,6)*.5;c.x+=m.nx*s;c.y+=m.ny*s;a.x-=m.nx*s;a.y-=m.ny*s;
+  const rv=(c.vx-a.vx)*m.nx+(c.vy-a.vy)*m.ny;if(rv<0){const j=-rv*.6;c.vx+=m.nx*j;c.vy+=m.ny*j;a.vx-=m.nx*j;a.vy-=m.ny*j;}}return hit;}
+function clampB(o,b){const r=bounds(o,b),S=bodyShape(b.p);if(b.x+S.x0<r.x){b.x=r.x-S.x0;b.vx=Math.abs(b.vx)*.3}if(b.x+S.x1>r.x+r.w){b.x=r.x+r.w-S.x1;b.vx=-Math.abs(b.vx)*.3}if(b.y+S.y0<r.y){b.y=r.y-S.y0;b.vy=Math.abs(b.vy)*.3}if(b.y+S.y1>r.y+r.h){b.y=r.y+r.h-S.y1;b.vy=-Math.abs(b.vy)*.3}}
 let raf=0;function kick(){if(!raf)raf=requestAnimationFrame(step);}
 function step(){raf=0;let busy=false;const W=innerWidth;
  for(const s in DR){const o=DR[s];if(o.glide){setOpen(o,o.open+o.glide);o.glide*=.86;if(Math.abs(o.glide)<.3||o.open<=0||o.open>=W)o.glide=0;}
@@ -240,8 +258,7 @@ function step(){raf=0;let busy=false;const W=innerWidth;
   for(const b of B){if(Math.abs(acc)>.05&&!b.z){b.vx-=Math.max(-3,Math.min(3,acc))*dir*.35;}
    if(b.z>0||b.vz){b.vz-=1.6;b.z+=b.vz;if(b.z<=0){b.z=0;if(b.vz<-5){b.vz=-b.vz*.38;knock(Math.min(.25,-b.vz*.02+.04),380+Math.random()*120)}else b.vz=0;}}
    b.vx*=.9;b.vy*=.9;b.x+=b.vx;b.y+=b.vy;clampB(o,b);}
-  for(let i=0;i<B.length;i++)for(let j=i+1;j<B.length;j++){const a=B[i],c=B[j];if(a.sec!==c.sec)continue;const dx=c.x-a.x,dy=c.y-a.y,dd=dx*dx+dy*dy,m=(a.r+c.r)*.8;
-   if(dd<m*m){const d=Math.sqrt(dd)||.01,push=(m-d)*.12,nx=dx/d||Math.random()-.5,ny=dy/d||Math.random()-.5;c.vx+=nx*push;c.vy+=ny*push;a.vx-=nx*push*.5;a.vy-=ny*push*.5;}}
+  for(let it=0;it<3;it++){let any=false;for(let i=0;i<B.length;i++)for(let j=i+1;j<B.length;j++){const a=B[i],c=B[j];if(a.sec!==c.sec||a.z>8||c.z>8)continue;if(collide(a,c))any=true;}for(const b of B)clampB(o,b);if(!any)break;}
   for(const b of B){if(Math.abs(b.vx)+Math.abs(b.vy)>.05||b.z>0)busy=true;b.el.style.transform=`translate(${b.x-PS/2}px,${b.y-PS/2-b.z}px) scale(${1+b.z*.006})`;b.el.style.zIndex=b.z>0?5:1;}}
  if(Math.abs(DR.L.v)<.05&&Math.abs(DR.R.v)<.05&&roll)roll.g.gain.setTargetAtTime(0,DAC.currentTime,.05);
  if(busy)kick();}

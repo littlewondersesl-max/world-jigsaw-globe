@@ -1,0 +1,10 @@
+import {chromium} from '/workspace/four-corners-src/node_modules/playwright/index.mjs';
+const url=process.argv[2]||'http://localhost:8944/';
+const b=await chromium.launch({executablePath:'/home/box/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome',args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+const p=await (await b.newContext({viewport:{width:1280,height:800}})).newPage();const errs=[];p.on('pageerror',e=>errs.push(String(e.stack).slice(0,300)));p.on('console',m=>m.type()=='error'&&errs.push(m.text()));
+await p.goto(url);await p.waitForFunction('window.__ready',null,{timeout:240000});
+await p.evaluate(()=>{const o=__game.DR.L;__game.setOpen(o,innerWidth);const H=innerHeight;for(const b of o.bodies){b.x=innerWidth/2+(Math.random()-.5)*300;b.y=H*.6+(Math.random()-.5)*200;}});
+await p.waitForTimeout(6000);
+const r=await p.evaluate(()=>{const B=__game.DR.L.bodies;const t0=performance.now();let ov=0;for(let i=0;i<B.length;i++)for(let j=i+1;j<B.length;j++){}return {n:B.length}});
+const t=await p.evaluate(()=>new Promise(res=>{let n=0,t0=performance.now();const f=()=>{if(++n<60)requestAnimationFrame(f);else res((performance.now()-t0)/60)};requestAnimationFrame(f)}));
+await p.screenshot({path:'shots/shape.png'});console.log(JSON.stringify({r,frameMs:t,errs}));await b.close();
