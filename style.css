@@ -82,3 +82,4 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 .dR .dh{background-image:url(wood_maple.jpg)}
 .dL .din:after{content:"";position:absolute;left:70px;right:70px;top:64px;bottom:96px;border-radius:14px;background:url(wood_teal.jpg) center/384px;filter:brightness(.82);box-shadow:inset 0 10px 22px #000a,inset 0 -3px 6px #fff3,inset 0 0 0 3px #0005,0 0 0 6px #ffffff1c,0 0 0 7px #0006;pointer-events:none;z-index:0}
 .dL .dp{z-index:1}
+.dL .din:after{background:url(tray_map.png) center/94% auto no-repeat,url(wood_teal.jpg) center/384px}
