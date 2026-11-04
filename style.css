@@ -75,3 +75,10 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 
 #dwrap{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:8}#dwrap .drawer{pointer-events:auto}#dwrap .drawer.shut{pointer-events:none}#dwrap .drawer.shut .dh{pointer-events:auto}html{overflow:hidden}
 #scr{right:54px!important}
+/* drawer woods: L = painted teal + recessed tray, R = maple/birch */
+.dL .din{background:#40685f url(wood_teal.jpg) center/384px}
+.dR .din{background:#e8cea6 url(wood_maple.jpg) center/384px}
+.dL .dh,#stack{background-image:url(wood_teal.jpg)}
+.dR .dh{background-image:url(wood_maple.jpg)}
+.dL .din:after{content:"";position:absolute;left:70px;right:70px;top:64px;bottom:96px;border-radius:14px;background:url(wood_teal.jpg) center/384px;filter:brightness(.82);box-shadow:inset 0 10px 22px #000a,inset 0 -3px 6px #fff3,inset 0 0 0 3px #0005,0 0 0 6px #ffffff1c,0 0 0 7px #0006;pointer-events:none;z-index:0}
+.dL .dp{z-index:1}
