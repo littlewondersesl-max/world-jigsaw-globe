@@ -162,7 +162,7 @@ function flyStripe(c){const img=$('flagImg').getBoundingClientRect(),tube=$('tub
  requestAnimationFrame(()=>requestAnimationFrame(()=>{d.style.left=(tube.left+3)+'px';d.style.width=(tube.width-6)+'px';d.style.top=(fill.top-h)+'px';d.style.height=h+'px';}));
  setTimeout(()=>{d.remove();const s=document.createElement('div');s.className='stripe';s.style.background=c;s.style.height=(100/stripeTotal)+'%';$('tubeFill').appendChild(s);},560);}
 function showCard(n){const f=FACTS[n];$('cName').textContent=n.replace('Dem. Rep.','Democratic Republic of the').replace('Is.','Islands').replace('Rep.','Republic')+' 🎉';
- $('cFacts').innerHTML=[`🌍 Continent: ${f[0]}`,`🏛️ Capital: ${f[1]}`,`⭐ Famous for: ${f[2]}`,`🐾 Animal: ${f[3]}`,`🍽️ Food: ${f[4]}`].map(t=>`<li>${t}</li>`).join('');$('card').hidden=false;}
+ $('cFacts').innerHTML=[`🌍 Continent: ${f[0]}`,`🏛️ Capital: ${f[1]}`,`⭐ Famous for: ${f[2]}`,`🐾 Animal: ${f[3]}`,`🍽️ Food: ${f[4]}`].map(t=>`<li>${t}</li>`).join('');$('card').hidden=false;if(!carrying)$('cOk').focus({preventScroll:true});}
 $('cOk').onclick=()=>{$('card').hidden=true;if(placed.size==pieces.length&&pieces.length){play('win');say('🎉 You finished the puzzle! 🎉',5000);}};
 // hints
 function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used: ${p.hint}/3`:'Tap the stack to draw a piece.';
@@ -306,3 +306,4 @@ document.getElementById('credB').onclick=()=>{L.hidden=true;P.hidden=false};docu
  addEventListener('resize',f);setTimeout(f,0);setTimeout(f,1500);})();
 // after using a top-bar control, hand the keyboard back to the game (Q/E rotate, Esc) instead of the control
 document.addEventListener('change',e=>{if(e.target.matches&&e.target.matches('header select,header input,#topbar select,#topbar input'))setTimeout(()=>e.target.blur(),0);});
+addEventListener('keydown',e=>{const c=document.getElementById('card');if(e.key==='Escape'&&c&&!c.hidden&&!(window.__game&&__game.carrying))document.getElementById('cOk').click();});// Esc closes the fact card (Enter/Space work via focus)
