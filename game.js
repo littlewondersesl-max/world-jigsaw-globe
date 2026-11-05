@@ -286,29 +286,42 @@ function step(){raf=0;let busy=false;const W=innerWidth;
 function drawerAt(x,y){const W=innerWidth;if(DR.L.open>0&&x<DR.L.open)return {side:'L',x:x+W-DR.L.open,y};if(DR.R.open>0&&x>W-DR.R.open)return {side:'R',x:x-(W-DR.R.open),y};return null;}
 function secAt(lx,ly){const r=secRects().find(r=>lx>=r.x&&lx<r.x+r.w&&ly>=r.y&&ly<r.y+r.h);return r?r.c:null;}
 // release a held piece: into a drawer, else onto the globe (anything not placed/parked goes back to the left drawer)
-function release(p,x,y){hiliteMach(-1,-1);const mk=machineAt(x,y);if(mk){beginMachineRun(mk,p).then(ok=>{if(ok)return;if(p.parked){renderTray();return}if(p.body){renderTray();return}if(!placed.has(p.f.name)&&!p.onPlat){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();});return;}
- const d=drawerAt(x,y);if(d){if(p.parked)unpark(p);addBody(d.side,p,d.x,d.y,true,d.side==='R'?secAt(d.x,d.y):null);renderTray();return;}
- drop(p,x,y);if(!placed.has(p.f.name)&&!p.parked&&!p.body){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}syncDrawers();}
+function release(p,x,y,vx,vy){hiliteMach(-1,-1);vx=vx||0;vy=vy||0;
+ const mk=machineAt(x,y);if(mk){beginMachineRun(mk,p).then(ok=>{if(ok)return;if(p.parked){renderTray();return}if(p.body){renderTray();return}if(p.space){renderTray();return}
+  if(!placed.has(p.f.name)&&!p.onPlat&&!p.onBelt){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();});return;}
+ const d=drawerAt(x,y);if(d){if(p.parked)unpark(p);remSpace(p);addBody(d.side,p,d.x,d.y,true,d.side==='R'?secAt(d.x,d.y):null);renderTray();return;}
+ const r=G3.dom.getBoundingClientRect();
+ const onStage=x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom;
+ const ll=onStage?G3.pick(x,y):null;
+ if(ll){remSpace(p);drop(p,x,y);if(!placed.has(p.f.name)&&!p.parked&&!p.body&&!p.space){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}syncDrawers();return;}
+ // empty space (not globe, not UI): float or orbit
+ if(onStage&&!isUiBlocked(x,y)){const spd=Math.hypot(vx,vy);
+  if(spd>=THROW_SPD){addSpace(p,x,y,vx,vy,'float');enterOrbit(p);say('Thrown into orbit 🪐',1600);}
+  else addSpace(p,x,y,vx*.35,vy*.35,'float');
+  renderTray();syncDrawers();return;}
+ if(!placed.has(p.f.name)&&!p.parked&&!p.body&&!p.space){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}
+ syncDrawers();}
 window.__release=release;
 // carry: piece follows the pointer. A drag releases on lift; a click/tap keeps it on the cursor until the next click/tap.
-let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';
- drag={p,el:src,x:e.clientX,y:e.clientY,moved:true};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
+let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';remSpace(p);
+ drag={p,el:src,x:e.clientX,y:e.clientY,moved:true,hist:[{t:performance.now(),x:e.clientX,y:e.clientY}]};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
  const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;
- const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{const skip=ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,#machines,header');if(skip&&!(ev.target.closest&&ev.target.closest('.mach'))){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}// double-click: keep holding
+ const mv=ev=>{if(!drag)return;moveGhost(ev.clientX,ev.clientY);const h=drag.hist;h.push({t:performance.now(),x:ev.clientX,y:ev.clientY});if(h.length>8)h.shift();},
+ dn=ev=>{const skip=ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,#machines,header');if(skip&&!(ev.target.closest&&ev.target.closest('.mach'))){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}
   downs++;ev.stopPropagation();ev.preventDefault();},
   up=ev=>{if(hd){hd=0;return;}const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
    removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);removeEventListener('keydown',esc);
-   drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY);};
- // Escape: drop the carried piece back into the All-pieces drawer
+   let vx=0,vy=0;const h=drag&&drag.hist||[];if(h.length>=2){const a=h[0],b=h[h.length-1],dt=Math.max(16,b.t-a.t);vx=(b.x-a.x)/(dt/1000);vy=(b.y-a.y)/(dt/1000);}
+   drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY,vx,vy);};
  const esc=ev=>{if(ev.key!=='Escape'||carrying!==p)return;removeEventListener('keydown',esc);removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);
-  drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';if(!p.body&&!p.parked&&!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();};
+  drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';if(!p.body&&!p.parked&&!p.space&&!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();};
  addEventListener('keydown',esc);
  addEventListener('pointermove',mv,true);addEventListener('pointerdown',dn,true);addEventListener('pointerup',up,true);}
 // stack bottom-left: a random loose piece from the left drawer
 const stk=document.createElement('div');stk.id='stack';stk.title='Take a piece';document.body.appendChild(stk);
 function drawStack(){const L=pieces.filter(p=>p.dloc==='L');stk.innerHTML=L.slice(0,4).map((p,i)=>`<div class="sp" style="transform:translate(${i*2}px,${-i*3}px) rotate(${(i*37)%20-10}deg)">${shapeSVG(p.f,trayScale(p.f)*.6).svg}</div>`).join('')+`<b>${L.length}</b>`;stk.classList.toggle('empty',!L.length);}
 stk.addEventListener('pointerdown',e=>{e.preventDefault();const L=pieces.filter(p=>p.dloc==='L');if(!L.length)return;stk.animate([{transform:'scale(1)'},{transform:'scale(.86,.8)'},{transform:'scale(1)'}],{duration:220});knock(.12,300);carry(L[0],e,stk);});
-function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p))remBody(b.p);for(const p of pieces){const gone=placed.has(p.f.name)||p.parked;if(gone&&p.body)remBody(p);
+function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p))remBody(b.p);for(const p of pieces){const gone=placed.has(p.f.name)||p.parked||p.space||p.onBelt;if((placed.has(p.f.name)||p.parked||p.space||p.onBelt)&&p.body)remBody(p);
   else if(!gone&&!p.body&&carrying!==p)addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),false);}drawStack();}
 const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')syncDrawers();};
 addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
@@ -380,26 +393,63 @@ function tickCoins(t){burstCoinsAt._raf=0;const dt=Math.min(.032,(tickCoins._t? 
  if(freeCoins.length)burstCoinsAt._raf=requestAnimationFrame(tickCoins);else tickCoins._t=0;}
 function spawnPlaceCoins(p){if(!p||!window.G3)return;const c=p.f.c;if(!G3.facing(c[0],c[1]))return;const [x,y]=G3.project(c[0],c[1]);const n=4+((Math.random()*3)|0);burstCoinsAt(x,y,n);}
 
-const MACH=[{id:'size',title:'Sizeinator',blurb:'True globe size',cost:3,img:'img/mach-size.png'},
- {id:'orient',title:'Orientationator',blurb:'Turns north-up',cost:3,img:'img/mach-orient.png'},
- {id:'find',title:'Finderator',blurb:'Hot & cold meter',cost:5,img:'img/mach-find.png'}];
+
+// ---------- zero-G space (float + orbit) ----------
+const spaceLayer=document.createElement('div');spaceLayer.id='spaceLayer';document.body.appendChild(spaceLayer);
+const ORB_MIN=1.15,ORB_MAX=2.55,THROW_SPD=780,HOLD_MS=480;
+function globeXY(){const r=G3.dom.getBoundingClientRect();return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2,R:Math.max(G3.screenRadius(),80)};}
+function isUiBlocked(x,y){try{const el=document.elementFromPoint(x,y);if(!el)return false;
+  return !!(el.closest&&el.closest('#machines,#hints,#stack,#zoom,#menuW,#topbar,header,#pouchWrap,#provBox,#card,#credP,#startM,#pause,.drawer,.dh,#scr'));}catch(e){return false;}}
+function remSpace(p){if(!p||!p.space)return;const s=p.space;if(s.el)s.el.remove();p.space=null;kickSpace();}
+function paintSpace(p){const s=p.space;if(!s||!s.el)return;s.el.style.transform=`translate3d(${s.x}px,${s.y}px,0) rotate(${p.angle}deg)`;s.el.classList.toggle('orbit',s.mode==='orbit');}
+function addSpace(p,x,y,vx,vy,mode){if(p.parked)unpark(p);if(p.body)remBody(p);remSpace(p);p.onPlat=null;p.onBelt=null;
+  const el=document.createElement('div');el.className='spPiece';el.dataset.n=p.f.name;
+  const gg=shapeSVG(p.f,trayScale(p.f)*.7);el.innerHTML=gg.svg;const sv=el.firstChild;if(sv){sv.setAttribute('width',64);sv.setAttribute('height',64);}
+  spaceLayer.appendChild(el);
+  const s={el,x,y,vx:vx||0,vy:vy||0,mode:mode||'float',r:0,ang:0,angV:0.4};
+  p.space=s;paintSpace(p);
+  el.addEventListener('pointerdown',e=>{
+    if(carrying||drag)return;e.preventDefault();e.stopPropagation();
+    const t0=performance.now();let moved=false;const x0=e.clientX,y0=e.clientY;
+    try{el.setPointerCapture(e.pointerId);}catch(_){}
+    const hold=setTimeout(()=>{if(!moved&&p.space){enterOrbit(p);say('Orbiting 🪐',1400);}},HOLD_MS);
+    el.onpointermove=ev=>{if(Math.hypot(ev.clientX-x0,ev.clientY-y0)>8){moved=true;clearTimeout(hold);
+      el.onpointermove=el.onpointerup=el.onpointercancel=null;remSpace(p);carry(p,ev,el);}};
+    el.onpointerup=el.onpointercancel=ev=>{clearTimeout(hold);el.onpointermove=el.onpointerup=el.onpointercancel=null;
+      if(!moved){remSpace(p);carry(p,ev,el);}};
+  });
+  kickSpace();return s;}
+function enterOrbit(p){const s=p.space;if(!s)return;const gxy=globeXY();const dx=s.x-gxy.x,dy=s.y-gxy.y;let r=Math.hypot(dx,dy)||gxy.R*1.5;
+  r=Math.max(gxy.R*ORB_MIN,Math.min(gxy.R*ORB_MAX,r));s.mode='orbit';s.r=r;s.ang=Math.atan2(dy,dx);
+  const cross=(dx*s.vy-dy*s.vx);s.angV=(cross/(r*r))|| (0.55/r);s.angV=Math.max(-1.2/r,Math.min(1.2/r,s.angV));
+  if(Math.abs(s.angV)<0.15/r)s.angV=(s.angV<0?-1:1)*0.35/r;
+  s.vx=s.vy=0;paintSpace(p);}
+function kickSpace(){if(!kickSpace._raf)kickSpace._raf=requestAnimationFrame(tickSpace);}
+function tickSpace(t){kickSpace._raf=0;const dt=Math.min(.033,(tickSpace._t?(t-tickSpace._t):16)/1000);tickSpace._t=t;
+  const gxy=globeXY();let live=0;
+  for(const p of (pieces||[])){const s=p.space;if(!s)continue;live++;
+    if(s.mode==='orbit'){s.ang+=s.angV*dt*60;s.x=gxy.x+Math.cos(s.ang)*s.r;s.y=gxy.y+Math.sin(s.ang)*s.r;
+      const rMin=gxy.R*ORB_MIN,rMax=gxy.R*ORB_MAX;if(s.r<rMin||s.r>rMax)s.r=Math.max(rMin,Math.min(rMax,s.r));}
+    else{s.vx+=(Math.sin(t*.001+s.x*.01)*.12);s.vy+=(Math.cos(t*.0008+s.y*.01)*.12);
+      s.vx*=.995;s.vy*=.995;s.x+=s.vx*dt;s.y+=s.vy*dt;
+      const pad=28,W=innerWidth,H=innerHeight;
+      if(s.x<pad){s.x=pad;s.vx=Math.abs(s.vx)*.6;}if(s.x>W-pad){s.x=W-pad;s.vx=-Math.abs(s.vx)*.6;}
+      if(s.y<pad+48){s.y=pad+48;s.vy=Math.abs(s.vy)*.6;}if(s.y>H-pad){s.y=H-pad;s.vy=-Math.abs(s.vy)*.6;}}
+    paintSpace(p);}
+  if(live)kickSpace._raf=requestAnimationFrame(tickSpace);else tickSpace._t=0;}
+
+const MACH=[{id:'find',title:'Finderator',blurb:'Hot & cold meter',cost:5,img:'img/mach-find.png'},
+ {id:'size',title:'Sizeinator',blurb:'True globe size',cost:3,img:'img/mach-size.png'},
+ {id:'orient',title:'Orientationator',blurb:'Turns north-up',cost:3,img:'img/mach-orient.png'}];
 const machWrap=document.getElementById('machines');
 if(machWrap.parentElement!==document.body)document.body.appendChild(machWrap);
 machWrap.innerHTML=MACH.map(m=>`<div class="mach" data-id="${m.id}" data-cost="${m.cost}" title="${m.blurb} · ${m.cost} coins">
-  <div class="machPlat" title="Pick up"></div>
-  <div class="outBelt"></div>
   <img class="machImg" src="${m.img}" alt="${m.title}" draggable="false">
   <div class="machMeta"><span class="machName">${m.title}</span><span class="machCost">🪙 ${m.cost}</span></div>
   <div class="inBelt" title="Drop piece on belt"></div>
 </div>`).join('');
 machWrap.hidden=true;
 const machById={};for(const el of machWrap.querySelectorAll('.mach'))machById[el.dataset.id]=el;
-for(const el of machWrap.querySelectorAll('.machPlat'))el.addEventListener('pointerdown',e=>{
-  e.preventDefault();e.stopPropagation();
-  const m=el.closest('.mach');const p=m&&m._platP;if(!p)return;
-  m._platP=null;m.classList.remove('hasPlat');el.innerHTML='';
-  p.onPlat=null;if(p.body)remBody(p);carry(p,e,el);
-});
 
 const hintsEl=document.getElementById('hints');
 const hintsToggle=document.getElementById('hintsToggle');
@@ -417,17 +467,19 @@ function setHintsOpen(open){
 })();
 hintsToggle.addEventListener('click',()=>setHintsOpen(hintsEl.classList.contains('collapsed')));
 
-function machMouth(el){const r=el.getBoundingClientRect();return {x:r.left+r.width*0.22,y:r.top+r.height*0.58};}
-function machineAt(x,y){for(const el of machWrap.querySelectorAll('.mach')){if(el.classList.contains('busy'))continue;
+function machMouth(el){const r=el.getBoundingClientRect();return {x:r.left+r.width*0.55,y:r.top+r.height*0.52};}
+function machBeltEnds(el){const belt=el.querySelector('.inBelt');const br=belt.getBoundingClientRect();
+  const mouth=machMouth(el);return {left:br.left+10,right:mouth.x,y:(br.top+br.bottom)/2,br};}
+function machineAt(x,y){for(const el of machWrap.querySelectorAll('.mach')){if(el.classList.contains('busy')&&!el.classList.contains('pushing'))continue;
   const belt=el.querySelector('.inBelt');const br=belt.getBoundingClientRect();
   const near=el.classList.contains('near')||el.classList.contains('over')||br.width>20;
-  if(near&&x>=br.left-6&&x<=br.right+8&&y>=br.top-10&&y<=br.bottom+10)return el.dataset.id;
-  const r=el.getBoundingClientRect();const mouthX=r.left+r.width*0.35;
-  if(x>=r.left&&x<=mouthX&&y>=r.top+r.height*0.25&&y<=r.bottom-r.height*0.15)return el.dataset.id;}
+  if(near&&x>=br.left-8&&x<=br.right+10&&y>=br.top-12&&y<=br.bottom+12)return el.dataset.id;
+  const r=el.getBoundingClientRect();
+  if(x>=r.left&&x<=r.left+r.width*0.55&&y>=r.top+8&&y<=r.bottom-8)return el.dataset.id;}
  return null}
 function hiliteMach(x,y){if(machWrap.hidden)return;for(const el of machWrap.querySelectorAll('.mach')){
-  if(el.classList.contains('busy')){el.classList.remove('near','over');continue;}
-  const m=machMouth(el);const d=Math.hypot(x-m.x,y-m.y);const near=d<130;el.classList.toggle('near',near);
+  if(el.classList.contains('busy')&&!el.classList.contains('pushing')){el.classList.remove('near','over');continue;}
+  const m=machMouth(el);const d=Math.hypot(x-m.x,y-m.y);const near=d<150;el.classList.toggle('near',near);
   const id=machineAt(x,y);el.classList.toggle('over',el.dataset.id===id);}}
 function applyMachEffect(kind,p){if(kind==='size'){p.s=1;say('Sizeinator: true size ✓',1600);return true}
  if(kind==='orient'){setAngle(p,0);say('Orientationator: north-up ✓',1600);return true}
@@ -439,41 +491,51 @@ function wait(ms){return new Promise(r=>setTimeout(r,ms))}
 async function beginMachineRun(kind,p){const el=machById[kind];if(!el||!p||placed.has(p.f.name))return false;
  const cost=+el.dataset.cost||0;
  if(coins<cost){say('Not enough coins for the '+el.querySelector('.machName').textContent+' (need '+cost+')',2200);play('miss');return false;}
- if(el.classList.contains('busy')||el._platP){say('That machine is busy — pick up the piece on its platform first',2200);return false;}
+ if(el.classList.contains('busy')){say('That machine is busy',1800);return false;}
  if(kind==='find'&&p.finderLost){say('Finderator already spent on this piece',1800);return false;}
- setCoins(coins-cost);el.classList.add('busy','near');
- // clear piece from drawers/park
- if(p.parked)unpark(p);if(p.body)remBody(p);p.onPlat=null;
- const g=shapeSVG(p.f,trayScale(p.f)*.7);
- const ride=document.createElement('div');ride.className='ride';ride.innerHTML=g.svg;const sv=ride.firstChild;if(sv){sv.setAttribute('width',56);sv.setAttribute('height',56);sv.style.transform=`rotate(${p.angle}deg)`;}
+ setCoins(coins-cost);el.classList.add('busy','near');el._grabbed=false;el._runId=(el._runId|0)+1;const runId=el._runId;
+ if(p.parked)unpark(p);if(p.body)remBody(p);remSpace(p);p.onPlat=null;p.onBelt=kind;
+ const gsvg=shapeSVG(p.f,trayScale(p.f)*.7);
+ const ride=document.createElement('div');ride.className='ride';ride.innerHTML=gsvg.svg;const sv=ride.firstChild;if(sv){sv.setAttribute('width',56);sv.setAttribute('height',56);sv.style.transform=`rotate(${p.angle}deg)`;}
  document.body.appendChild(ride);
- const mouth=machMouth(el);const belt=el.querySelector('.inBelt').getBoundingClientRect();
- let x0=belt.left+12,y0=(belt.top+belt.bottom)/2;
- ride.style.left=x0+'px';ride.style.top=y0+'px';
- await wait(30);
- ride.style.left=mouth.x+'px';ride.style.top=mouth.y+'px';
- await wait(580);
- ride.style.opacity='0';el.classList.add('blink');beepMach();play('place');
- await wait(420);
- el.classList.remove('blink');ride.remove();
- applyMachEffect(kind,p);
- // output belt up to platform
- const out=el.querySelector('.outBelt');const plat=el.querySelector('.machPlat');
- el.classList.add('hasPlat');el.classList.add('delivering');
  await wait(40);
- const ob=out.getBoundingClientRect();const pr=plat.getBoundingClientRect();
- const ride2=document.createElement('div');ride2.className='ride';ride2.innerHTML=g.svg;const sv2=ride2.firstChild;if(sv2){sv2.setAttribute('width',56);sv2.setAttribute('height',56);sv2.style.transform=`rotate(${p.angle}deg)`;}
- document.body.appendChild(ride2);
- ride2.style.left=(ob.left+ob.width/2)+'px';ride2.style.top=(ob.bottom-10)+'px';
+ const ends=machBeltEnds(el);
+ ride.style.transition='none';ride.style.left=ends.left+'px';ride.style.top=ends.y+'px';
  await wait(30);
- ride2.style.transition='left .9s linear, top .9s linear';
- ride2.style.left=(pr.left+pr.width/2)+'px';ride2.style.top=(pr.top+pr.height/2)+'px';
- await wait(920);
- ride2.remove();
- plat.innerHTML=`<div class="platPiece">${shapeSVG(p.f,trayScale(p.f)*.55).svg}</div>`;
- const ps=plat.querySelector('svg');if(ps){ps.setAttribute('width',54);ps.setAttribute('height',54);ps.style.transform=`rotate(${p.angle}deg)`;}
- el._platP=p;p.onPlat=kind;el.classList.remove('busy','delivering','near','over');
- say('Ready on the '+el.querySelector('.machName').textContent+' platform',1600);
+ ride.style.transition='left .65s linear, top .65s linear';
+ ride.style.left=ends.right+'px';ride.style.top=ends.y+'px';
+ await wait(680);
+ if(el._runId!==runId){ride.remove();return false;}
+ ride.style.opacity='0';el.classList.add('blink');try{beepMach();}catch(_){ }play('place');
+ await wait(2000);
+ if(el._runId!==runId){ride.remove();return false;}
+ el.classList.remove('blink');
+ applyMachEffect(kind,p);
+ el.classList.add('pushing');
+ ride.style.opacity='1';
+ const ends2=machBeltEnds(el);
+ ride.style.transition='none';ride.style.left=ends2.right+'px';ride.style.top=ends2.y+'px';
+ await wait(20);
+ const outLeft=ends2.left-36;
+ const grabAt=ends2.right-36;
+ let grabbed=false;
+ const onGrab=e=>{if(grabbed||el._runId!==runId)return;e.preventDefault();e.stopPropagation();
+  grabbed=true;el._grabbed=true;ride.classList.remove('grabOK');ride.onpointerdown=null;
+  ride.remove();p.onBelt=null;el.classList.remove('busy','pushing','near','over');
+  carry(p,e,ride);};
+ await new Promise(resolve=>{
+  const t0=performance.now();const dur=1600;const x0=ends2.right,x1=outLeft;
+  function step(now){if(el._runId!==runId||grabbed){resolve();return;}
+   const u=Math.min(1,(now-t0)/dur);const xx=x0+(x1-x0)*u;ride.style.left=xx+'px';ride.style.top=ends2.y+'px';
+   if(xx<=grabAt&&!ride.classList.contains('grabOK')){ride.classList.add('grabOK');ride.onpointerdown=onGrab;el.classList.remove('busy');}
+   if(u>=1){resolve();return;}
+   requestAnimationFrame(step);}
+  requestAnimationFrame(step);});
+ if(grabbed||el._runId!==runId){if(!grabbed)ride.remove();return true;}
+ const fx=parseFloat(ride.style.left)||outLeft,fy=ends2.y;
+ ride.remove();p.onBelt=null;el.classList.remove('busy','pushing','near','over');
+ addSpace(p,fx,fy,-140-Math.random()*80,(Math.random()-.5)*50,'float');
+ say('Floating in zero-G — drag onto the globe or throw into orbit',2600);
  renderTray();syncDrawers();return true}
 function enableFinder(p){if(p.finderLost)return;p.finder={on:true,calibrated:false,pct0:20+Math.random()*20,dZero:0,tgt:p.f.c.slice(),pct:null};updFinderBadge(p)}
 function applyFinder(p,ll){enableFinder(p);if(ll)calibrateFinder(p.finder,ll);return p.finder}
@@ -518,21 +580,22 @@ function smAsk(title,opts,back){sm.innerHTML=`<div class="smc"><h2>${title}</h2>
 function smChoose(k){if(k==='global')return startGame('countries','all');
  if(k==='cont')return smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('countries',v)]));
  smAsk('Provinces: Global or Continent?',[['g','🌍 Global (30 big countries)',()=>startGame('prov','starter')],['c','Continent',()=>smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('prov',v)]),()=>smChoose('prov'))]]);}
-async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(0);for(const el of machWrap.querySelectorAll('.mach')){el._platP=null;el.classList.remove('hasPlat','busy','blink','near','over');const pl=el.querySelector('.machPlat');if(pl)pl.innerHTML='';}while(freeCoins.length){const c=freeCoins.pop();c.el.remove();}
+async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(0);for(const el of machWrap.querySelectorAll('.mach')){el._platP=null;el._runId=(el._runId|0)+1;el.classList.remove('hasPlat','busy','blink','near','over','pushing','delivering');}document.querySelectorAll('.ride').forEach(e=>e.remove());for(const p of (pieces||[])){remSpace(p);p.onBelt=null;p.onPlat=null;}while(freeCoins.length){const c=freeCoins.pop();c.el.remove();}
  say(mode==='prov'?'Provinces: place a country, then fill in its provinces':'New game: '+$('set').selectedOptions[0].textContent,2400);}
 function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;machWrap.hidden=true;if(pouchWrap)pouchWrap.hidden=true;}
 // ---------- pause menu + save / load (localStorage) ----------
 const SAVE_KEY='worldJigsaw.save.v1';
-function snapshot(){return {v:4,t:Date.now(),coins,mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
+function snapshot(){return {v:5,t:Date.now(),coins,mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
  quat:G3.quat(),cam:G3.cam(),drawers:{L:DR.L.open,R:DR.R.open},placed:[...placed],anc:anc?{n:anc.p.f.name,step:anc.step}:null,
  pieces:pieces.map(p=>{const o={n:p.f.name,angle:p.angle,hint:p.hint};if(p.finder)o.finder=JSON.parse(JSON.stringify(p.finder));if(p.finderLost)o.finderLost=true;if(placed.has(p.f.name))o.st='placed';else if(p.parked){o.st='parked';o.lon=p.lon;o.lat=p.lat;o.s=p.s;}
+  else if(p.space){o.st='space';o.x=p.space.x;o.y=p.space.y;o.vx=p.space.vx;o.vy=p.space.vy;o.smode=p.space.mode;o.sr=p.space.r;o.sang=p.space.ang;o.sangV=p.space.angV;}
   else if(p.body){o.st=p.dloc;o.x=p.body.x;o.y=p.body.y;o.sec=p.body.sec;}else o.st='L';return o;})};}
 function saveGame(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));toast('Game saved');}catch(e){toast('Could not save: '+e.message);}updPause();}
 function readSave(){try{return JSON.parse(localStorage.getItem(SAVE_KEY)||'null');}catch(e){return null}}
 function cancelHeld(){if(carrying){dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return true}
  if(provCancel())return true;
  if(drag){const d=drag;d.el.onpointermove=d.el.onpointerup=d.el.onpointercancel=null;drag=null;ghost.remove();d.el.style.opacity='';return true}return false}
-async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(S.coins|0);const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
+async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();for(const p of (pieces||[]))remSpace(p);document.querySelectorAll('.ride').forEach(e=>e.remove());sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(S.coins|0);const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
  const o=S.opts||{};$('easy').checked=!!o.easy;$('lbl').checked=o.lbl!==false;G3.labels($('lbl').checked);$('bg').value=o.bg||'0';G3.setBg(+$('bg').value);muted=!!o.muted;$('mute').textContent=muted?'🔇':'🔊';
  $('set').value=S.set;setPrev=S.set;buildSet();
  const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;p.finder=q.finder?JSON.parse(JSON.stringify(q.finder)):null;p.finderLost=!!q.finderLost;return p}).filter(Boolean);
@@ -544,7 +607,7 @@ async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=
   for(const n of (S.provOpen||[]))openProv(n,true);}
  for(const q of S.pieces)if(q.st==='parked')park(byN[q.n],[q.lon,q.lat],q.s);
  if(S.anc){const p=byN[S.anc.n];if(p&&p.parked){anc={p,step:S.anc.step};p.ov.classList.add('anc');p.ov.style.cursor='default';p.ov.addEventListener('pointerdown',ancDown);if(anc.step==='lat')G3.outline(p.f);else if(anc.step==='blink')nextStep();}}
- for(const q of S.pieces)if(q.st==='L'||q.st==='R'){const p=byN[q.n];if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}
+ for(const q of S.pieces){const p=byN[q.n];if(!p)continue;if(q.st==='space'){const s=addSpace(p,q.x||innerWidth/2,q.y||innerHeight/2,q.vx||0,q.vy||0,q.smode||'float');if(q.smode==='orbit'){s.mode='orbit';s.r=q.sr||globeXY().R*1.5;s.ang=q.sang||0;s.angV=q.sangV||0.4/s.r;paintSpace(p);}}else if(q.st==='L'||q.st==='R'){if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}}
  DR.L.glide=DR.R.glide=0;DR.L.open=S.drawers.L;DR.R.open=S.drawers.R;for(const s in DR){DR[s].pv=DR[s].open;DR[s].v=0;}
  sel=null;renderTray();for(const s in DR)for(const b of DR[s].bodies){b.vx=b.vy=0;}
  if(S.cam)G3.setCam(S.cam);updHints();progress();kick();toast('Game loaded');return true;}
@@ -567,7 +630,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,addSpace,remSpace,enterOrbit,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();

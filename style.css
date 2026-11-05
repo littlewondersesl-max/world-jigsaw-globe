@@ -117,35 +117,34 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #hints.collapsed{height:auto;align-self:flex-end;border-top-left-radius:12px;box-shadow:0 -4px 18px #0006}
 #hints{background:#122238}
 
-/* Conveyor machines — fixed on the right edge, half clipped, facing the globe */
-#machines{position:fixed;right:0;top:96px;bottom:16px;width:0;z-index:14;display:flex;flex-direction:column;justify-content:space-evenly;align-items:flex-end;pointer-events:none}
+/* Conveyor machines — top-down enamelled mouths on right edge (Pip sketch) */
+#machines{position:fixed;right:0;top:88px;bottom:12px;width:210px;z-index:14;display:flex;flex-direction:column;justify-content:space-evenly;align-items:flex-end;pointer-events:none;padding-right:0}
 #machines[hidden]{display:none!important}
-#machines .mach{position:relative;width:168px;height:128px;margin:4px 0;transform:translateX(48%);pointer-events:auto;user-select:none;filter:drop-shadow(-4px 6px 10px #000a);transition:filter .2s}
-#machines .mach.near,#machines .mach.over{filter:drop-shadow(-4px 6px 14px #000c) drop-shadow(0 0 8px #f6d27a66)}
+#machines .mach{position:relative;width:210px;height:108px;margin:2px 0;transform:translateX(46%);pointer-events:auto;user-select:none;filter:drop-shadow(-4px 6px 10px #000a);transition:filter .2s,transform .2s}
+#machines .mach.near,#machines .mach.over{filter:drop-shadow(-4px 6px 14px #000c) drop-shadow(0 0 8px #f6d27a66);transform:translateX(40%)}
 #machines .mach.busy{pointer-events:none}
 #machines .machImg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:left center;pointer-events:none;z-index:2}
-#machines .machMeta{position:absolute;left:4px;top:2px;z-index:4;display:flex;flex-direction:column;gap:1px;pointer-events:none;text-shadow:0 1px 2px #000}
-#machines .machName{font:700 10px/1.1 system-ui,sans-serif;color:#f3e6d3;max-width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#machines .machMeta{position:absolute;right:6px;top:4px;z-index:4;display:flex;flex-direction:column;align-items:flex-end;gap:1px;pointer-events:none;text-shadow:0 1px 2px #000}
+#machines .machName{font:700 10px/1.1 system-ui,sans-serif;color:#f3e6d3;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
 #machines .machCost{font:700 11px/1 system-ui,sans-serif;color:#ffe08a}
 #machines .machCost.broke{color:#ff8a8a}
-#machines .inBelt{position:absolute;left:8px;top:58%;height:22px;width:0;z-index:1;transform:translate(-100%,-50%);border-radius:4px;background:linear-gradient(#3a3a42,#1c1c22);box-shadow:inset 0 0 0 1px #111,0 2px 6px #0008;overflow:hidden;transition:width .28s cubic-bezier(.2,.8,.2,1);pointer-events:auto}
-#machines .mach.near .inBelt,#machines .mach.over .inBelt,#machines .mach.busy .inBelt{width:96px}
-#machines .inBelt::before{content:"";position:absolute;inset:3px 0;background:repeating-linear-gradient(90deg,#2a2a30 0 10px,#4a4a55 10px 14px);animation:beltL 0s linear infinite}
+#machines .inBelt{position:absolute;left:4px;top:50%;height:36px;width:0;z-index:3;transform:translateY(-50%);border-radius:5px;background:linear-gradient(#2e2e36,#15151a);box-shadow:inset 0 0 0 1px #0a0a0a,0 2px 6px #0008;overflow:hidden;transition:width .28s cubic-bezier(.2,.8,.2,1);pointer-events:auto}
+#machines .mach.near .inBelt,#machines .mach.over .inBelt,#machines .mach.busy .inBelt,#machines .mach.pushing .inBelt{width:118px}
+#machines .inBelt::before{content:"";position:absolute;inset:4px 0;background:repeating-linear-gradient(90deg,#222228 0 11px,#4a4a55 11px 16px);animation:beltL 0s linear infinite}
 #machines .mach.near .inBelt::before,#machines .mach.over .inBelt::before,#machines .mach.busy .inBelt::before{animation-duration:.45s}
-@keyframes beltL{to{transform:translateX(14px)}}
-#machines .outBelt{position:absolute;left:-18px;bottom:-8px;width:22px;height:0;z-index:1;border-radius:4px;background:linear-gradient(90deg,#3a3a42,#1c1c22);box-shadow:inset 0 0 0 1px #111;overflow:hidden;transition:height .35s ease;pointer-events:none}
-#machines .mach.busy.delivering .outBelt,#machines .mach.delivering .outBelt{height:min(36vh,280px)}#machines .mach.hasPlat .outBelt{height:118px}
-#machines .outBelt::before{content:"";position:absolute;inset:0 3px;background:repeating-linear-gradient(#2a2a30 0 10px,#4a4a55 10px 14px);animation:beltU 0s linear infinite}
-#machines .mach.busy .outBelt::before,#machines .mach.hasPlat .outBelt::before{animation-duration:.5s}
-@keyframes beltU{to{transform:translateY(-14px)}}
-#machines .machPlat{position:absolute;left:-96px;top:8px;transform:none;width:64px;height:64px;z-index:5;border-radius:10px;background:radial-gradient(circle at 40% 35%,#5a6a7a,#2a3440 70%);box-shadow:inset 0 0 0 2px #8aa,#0008 0 4px 12px;display:none;align-items:center;justify-content:center;cursor:grab;pointer-events:auto}
-#machines .mach.hasPlat .machPlat{display:flex}
-#machines .machPlat .platPiece{width:54px;height:54px;pointer-events:none}
-#machines .machPlat .platPiece svg{width:100%;height:100%;filter:drop-shadow(0 2px 2px #000a)}
-#machines .mach.blink .machImg{animation:machBlink .18s ease 4}
+#machines .mach.pushing .inBelt::before{animation-duration:.4s;animation-direction:reverse}
+@keyframes beltL{to{transform:translateX(16px)}}
+#machines .mach.blink .machImg{animation:machBlink .18s ease 6}
 @keyframes machBlink{50%{filter:brightness(1.55) saturate(1.3)}}
-#machines .ride{position:fixed;z-index:30;pointer-events:none;width:56px;height:56px;margin:-28px 0 0 -28px;transition:left .55s linear,top .55s linear}
-#machines .ride svg{width:100%;height:100%;filter:drop-shadow(0 2px 3px #000a)}
+.ride{position:fixed;z-index:30;pointer-events:none;width:56px;height:56px;margin:-28px 0 0 -28px;transition:left .55s linear,top .55s linear}
+.ride.grabOK{pointer-events:auto;cursor:grab;z-index:31}
+.ride svg{width:100%;height:100%;filter:drop-shadow(0 2px 3px #000a)}
+
+/* Zero-G floating / orbiting pieces in empty space */
+#spaceLayer{position:fixed;inset:0;pointer-events:none;z-index:11;overflow:hidden}
+.spPiece{position:absolute;left:0;top:0;width:64px;height:64px;margin:-32px 0 0 -32px;pointer-events:auto;cursor:grab;touch-action:none;will-change:transform;filter:drop-shadow(0 0 6px #9cf6)}
+.spPiece svg{width:100%;height:100%;pointer-events:none}
+.spPiece.orbit{filter:drop-shadow(0 0 8px #ffe08a88)}
 
 /* Coin burst + pouch (top-left of stage — clear of drawers/hints/stack) */
 #pouchWrap{position:fixed;left:18px;top:58px;z-index:12;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;filter:drop-shadow(0 4px 10px #000a)}
