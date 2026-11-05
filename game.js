@@ -155,19 +155,61 @@ function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||
  if(fits(p,ll)){unpark(p);place(p);return;}
  park(p,ll,1);say(neighbourHint(p,ll),2200);}
 function neighbourHint(p,ll){const f=p.f,tol=Math.max(0.09,f.rad*0.9);return (d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll))&&Math.abs(angOff(p.angle))>25?'Right place! Now turn it to fit ⟲ ⟳':'Parked here. It joins when the puzzle reaches it.';}
-function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();}
+function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length))setTimeout(maybeWin,900);}
 function progress(){updScreen();$('progress').textContent=`${placed.size} / ${pieces.length}`;}
 // flag + tube
-let celebGen=0;function dismissCard(){celebGen++;const c=$('card');if(c)c.hidden=true;const pop=$('flagPop');if(pop)pop.hidden=true;}
-function celebrate(n){const gen=++celebGen;const fl=FLAGS[n];const pop=$('flagPop');if(!fl){if(gen===celebGen)showCard(n);return;}$('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
- const cs=cols(n);let i=0;setTimeout(function next(){if(gen!==celebGen)return;if(i>=cs.length){pop.hidden=true;showCard(n);return;}flyStripe(cs[i++]);setTimeout(next,450);},700);}
+let celebGen=0,placeTabTimer=0,countriesOpen=false,cardCountry=null;
+function prettyCountry(n){return String(n).replace('Dem. Rep.','Democratic Republic of the').replace('Is.','Islands').replace('Rep.','Republic')}
+function dismissCard(){celebGen++;cardCountry=null;const c=$('card');if(c)c.hidden=true;const pop=$('flagPop');if(pop)pop.hidden=true;}
+function hidePlaceTab(){clearTimeout(placeTabTimer);placeTabTimer=0;const tab=$('placeTab');if(!tab)return;tab.classList.remove('on');}
+function closeCountriesDrop(){countriesOpen=false;const d=$('countriesDrop'),b=$('countriesB');if(d)d.hidden=true;if(b)b.setAttribute('aria-expanded','false');}
+function updCountriesUI(){const b=$('countriesB'),nEl=$('countriesN'),d=$('countriesDrop');if(!b||!nEl||!d)return;
+  const list=[...placed];nEl.textContent=String(list.length);b.disabled=false;
+  if(!list.length){d.innerHTML='<div class="empty">No countries placed yet</div>';return;}
+  d.innerHTML=list.map(n=>`<button type="button" role="option" data-n="${n.replace(/"/g,'&quot;')}">${prettyCountry(n)}</button>`).join('');
+  d.querySelectorAll('button').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openCountryCard(btn.dataset.n);});}
+function showPlaceTab(n){const tab=$('placeTab');if(!tab||!FACTS[n])return;clearTimeout(placeTabTimer);closeCountriesDrop();
+  const f=FACTS[n],fl=FLAGS[n];const flag=fl?`<img class="ptFlag" alt="" src="flags/${fl[0]}.svg">`:'<span class="ptFlag"></span>';
+  tab.innerHTML=`<div class="ptIn">${flag}<div class="ptBody"><strong>${prettyCountry(n)}</strong><span>🏛️ ${f[1]} · ${f[0]}</span><span>⭐ ${f[2]}</span><div class="ptHint">Tap for the full card</div></div></div>`;
+  tab.dataset.n=n;tab.hidden=false;
+  // Two-frame show so the opacity/transform transition actually runs (display:none→block skips it).
+  tab.classList.remove('on');
+  tab.style.transition='none';
+  void tab.offsetWidth;
+  tab.style.transition='';
+  requestAnimationFrame(()=>{tab.classList.add('on');});
+  tab.onclick=e=>{e.stopPropagation();openCountryCard(n);};
+  placeTabTimer=setTimeout(()=>hidePlaceTab(),5000);updCountriesUI();}
+function openCountryCard(n){if(!FACTS[n])return;hidePlaceTab();closeCountriesDrop();showCard(n);}
+function celebrate(n){const gen=++celebGen;updCountriesUI();const fl=FLAGS[n];const pop=$('flagPop');
+  // Never auto-open the blocking full card — show a small tab under Countries instead.
+  if(!fl){if(gen===celebGen)showPlaceTab(n);return;}
+  $('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
+  const cs=cols(n);let i=0;setTimeout(function next(){if(gen!==celebGen)return;if(i>=cs.length){pop.hidden=true;if(gen===celebGen)showPlaceTab(n);return;}flyStripe(cs[i++]);setTimeout(next,450);},700);}
 function flyStripe(c){const img=$('flagImg').getBoundingClientRect(),tube=$('tube').getBoundingClientRect(),fill=$('tubeFill').getBoundingClientRect();
- const h=Math.max(2,tube.height/stripeTotal);const d=document.createElement('div');d.className='fly';d.style.background=c;d.style.left=img.left+'px';d.style.top=(img.top+img.height/2)+'px';d.style.width=img.width+'px';document.body.appendChild(d);
+ const h=Math.max(2,tube.height/stripeTotal);const d=document.createElement('div');d.className='fly';d.style.left=img.left+'px';d.style.top=(img.top+img.height/2)+'px';d.style.width=img.width+'px';d.style.background=c;document.body.appendChild(d);
  requestAnimationFrame(()=>requestAnimationFrame(()=>{d.style.left=(tube.left+3)+'px';d.style.width=(tube.width-6)+'px';d.style.top=(fill.top-h)+'px';d.style.height=h+'px';}));
  setTimeout(()=>{d.remove();const s=document.createElement('div');s.className='stripe';s.style.background=c;s.style.height=(100/stripeTotal)+'%';$('tubeFill').appendChild(s);},560);}
-function showCard(n){const f=FACTS[n];$('cName').textContent=n.replace('Dem. Rep.','Democratic Republic of the').replace('Is.','Islands').replace('Rep.','Republic')+' 🎉';
+function showCard(n){const f=FACTS[n];if(!f)return;cardCountry=n;$('cName').textContent=prettyCountry(n)+' 🎉';
  $('cFacts').innerHTML=[`🌍 Continent: ${f[0]}`,`🏛️ Capital: ${f[1]}`,`⭐ Famous for: ${f[2]}`,`🐾 Animal: ${f[3]}`,`🍽️ Food: ${f[4]}`].map(t=>`<li>${t}</li>`).join('');$('card').hidden=false;if(!carrying)$('cOk').focus({preventScroll:true});}
-$('cOk').onclick=()=>{dismissCard();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length)){play('win');say('🎉 You finished the puzzle! 🎉',5000);}};
+function maybeWin(){if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length)){play('win');say('🎉 You finished the puzzle! 🎉',5000);}}
+$('cOk').onclick=()=>{dismissCard();maybeWin();};
+// Click dimmed backdrop (not the card body) to close — card only opens on demand, so this never traps place-flow.
+$('card').addEventListener('click',e=>{if(e.target===$('card'))dismissCard();});
+$('card').querySelector('.cardIn').addEventListener('click',e=>e.stopPropagation());
+// Countries dropdown
+(function initCountries(){
+  const b=$('countriesB'),d=$('countriesDrop');if(!b||!d)return;
+  b.addEventListener('click',e=>{e.stopPropagation();if(countriesOpen){closeCountriesDrop();return;}
+    updCountriesUI();countriesOpen=true;d.hidden=false;b.setAttribute('aria-expanded','true');hidePlaceTab();});
+  addEventListener('pointerdown',e=>{
+    const wrap=$('countriesWrap');
+    if(wrap&&wrap.contains(e.target))return;
+    closeCountriesDrop();
+    // place tab stays until its own timer / click — clicking elsewhere does not steal it unless over UI chrome
+  },true);
+  updCountriesUI();
+})();
 // hints
 function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used: ${p.hint}/3`:'Tap the stack to draw a piece.';
  ['h1','h2','h3'].forEach((h,i)=>$(h).disabled=!p||p.hint<i);if(!p)$('hintText').textContent='';}
@@ -403,7 +445,7 @@ function isUiBlocked(x,y){try{const el=document.elementFromPoint(x,y);if(!el)ret
   if(el.closest&&(el.closest('.spPiece')||el.closest('#ghost')||el.closest('.ride')||el.closest('.coinFly')))return false;
   // shut drawer: only the thin handle is interactive; treat as UI, but empty stage beyond it is free
   if(el.closest&&el.closest('.dh'))return true;
-  return !!(el.closest&&el.closest('#machines,#hints,#stack,#zoom,#menuW,#topbar,header,#pouchWrap,#provBox,#card,#credP,#startM,#pause,.drawer:not(.shut),#scr'));}catch(e){return false;}}
+  return !!(el.closest&&el.closest('#machines,#hints,#stack,#zoom,#menuW,#topbar,header,#countriesWrap,#placeTab,#countriesDrop,#pouchWrap,#provBox,#card,#credP,#startM,#pause,.drawer:not(.shut),#scr'));}catch(e){return false;}}
 function remSpace(p){if(!p||!p.space)return;const s=p.space;if(s.el)s.el.remove();p.space=null;kickSpace();}
 function paintSpace(p){const s=p.space;if(!s||!s.el)return;s.el.style.transform=`translate3d(${s.x}px,${s.y}px,0) rotate(${p.angle}deg)`;s.el.classList.toggle('orbit',s.mode==='orbit');}
 function addSpace(p,x,y,vx,vy,mode){if(p.parked)unpark(p);if(p.body)remBody(p);remSpace(p);p.onPlat=null;p.onBelt=null;
@@ -586,7 +628,7 @@ function smChoose(k){if(k==='global')return startGame('countries','all');
  if(k==='cont')return smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('countries',v)]));
  smAsk('Provinces: Global or Continent?',[['g','🌍 Global (30 big countries)',()=>startGame('prov','starter')],['c','Continent',()=>smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('prov',v)]),()=>smChoose('prov'))]]);}
 async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(0);for(const el of machWrap.querySelectorAll('.mach')){el._platP=null;el._runId=(el._runId|0)+1;el.classList.remove('hasPlat','busy','blink','near','over','pushing','delivering');}document.querySelectorAll('.ride').forEach(e=>e.remove());for(const p of (pieces||[])){remSpace(p);p.onBelt=null;p.onPlat=null;}while(freeCoins.length){const c=freeCoins.pop();c.el.remove();}
- say(mode==='prov'?'Provinces: place a country, then fill in its provinces':'New game: '+$('set').selectedOptions[0].textContent,2400);}
+ hidePlaceTab();closeCountriesDrop();dismissCard();updCountriesUI();say(mode==='prov'?'Provinces: place a country, then fill in its provinces':'New game: '+$('set').selectedOptions[0].textContent,2400);}
 function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;machWrap.hidden=true;if(pouchWrap)pouchWrap.hidden=true;}
 // ---------- pause menu + save / load (localStorage) ----------
 const SAVE_KEY='worldJigsaw.save.v1';
@@ -615,7 +657,7 @@ async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();for(const 
  for(const q of S.pieces){const p=byN[q.n];if(!p)continue;if(q.st==='space'){const s=addSpace(p,q.x||innerWidth/2,q.y||innerHeight/2,q.vx||0,q.vy||0,q.smode||'float');if(q.smode==='orbit'){s.mode='orbit';s.r=q.sr||globeXY().R*1.5;s.ang=q.sang||0;s.angV=q.sangV||0.4/s.r;paintSpace(p);}}else if(q.st==='L'||q.st==='R'){if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}}
  DR.L.glide=DR.R.glide=0;DR.L.open=S.drawers.L;DR.R.open=S.drawers.R;for(const s in DR){DR[s].pv=DR[s].open;DR[s].v=0;}
  sel=null;renderTray();for(const s in DR)for(const b of DR[s].bodies){b.vx=b.vy=0;}
- if(S.cam)G3.setCam(S.cam);updHints();progress();kick();toast('Game loaded');return true;}
+ if(S.cam)G3.setCam(S.cam);updHints();progress();hidePlaceTab();closeCountriesDrop();updCountriesUI();kick();toast('Game loaded');return true;}
 const pz=document.createElement('div');pz.id='pause';pz.hidden=true;pz.innerHTML='<div class="pb"><h3>Paused</h3><button id="pzRes">Resume</button><button id="pzSave">Save game</button><button id="pzLoad">Load saved game</button><div id="pzInfo"></div></div>';document.body.appendChild(pz);
 const tst=document.createElement('div');tst.id='toast';document.body.appendChild(tst);
 function toast(t){tst.textContent=t;tst.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>tst.classList.remove('on'),1800);}
@@ -635,7 +677,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,addSpace,remSpace,enterOrbit,isUiBlocked,dismissCard,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,addSpace,remSpace,enterOrbit,isUiBlocked,dismissCard,showPlaceTab,openCountryCard,updCountriesUI,hidePlaceTab,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();

@@ -1,5 +1,5 @@
 *{box-sizing:border-box}body{margin:0;font-family:"Trebuchet MS",Arial,sans-serif;background:#0d2240;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden;touch-action:none}
-header{display:flex;gap:10px;align-items:center;padding:6px 12px;background:#132f57;flex-wrap:wrap}h1{font-size:20px;margin:0 8px 0 0}
+header{display:flex;gap:10px;align-items:center;padding:6px 12px;background:#132f57;flex-wrap:wrap;overflow:visible;position:relative;z-index:40}h1{font-size:20px;margin:0 8px 0 0}
 select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:pointer}#progress{font-weight:bold;font-size:18px;margin-left:auto;background:#ffd34d;color:#222;padding:4px 12px;border-radius:12px}
 .chk{font-size:14px}main{flex:1;display:flex;min-height:0}
 #tray{width:230px;background:linear-gradient(#2a1a0f,#1d130b);border-right:6px solid #3a2414;box-shadow:inset 0 0 30px #000a;overflow-y:auto;padding:6px}#tray h2,#hints h2{margin:4px;font-size:16px}
@@ -164,3 +164,26 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #ghost .fbadge,.pvg .fbadge{right:4px;top:4px}
 #provBox .pv.ovseas{position:relative}
 #provBox .fmeter{font-style:normal;font-size:11px;margin-top:1px;opacity:.9}
+
+/* Countries button + place tab + dropdown */
+#countriesWrap{position:relative;z-index:30;margin-left:4px;overflow:visible}
+#countriesB{background:#243a55;color:#e8eef3;border:1px solid #3a5575;border-radius:8px;padding:5px 10px;font:600 13px/1.2 system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+#countriesB:hover,#countriesB[aria-expanded="true"]{background:#2f4a6a}
+#countriesB b{background:#1a2a40;border-radius:8px;padding:1px 6px;font-size:12px;color:#ffe08a;min-width:1.2em;text-align:center}
+#countriesDrop{position:absolute;left:0;top:calc(100% + 6px);min-width:220px;max-width:min(320px,70vw);max-height:min(360px,50vh);overflow-y:auto;background:#0f1a2cf7;border:1px solid #3a5575;border-radius:10px;box-shadow:0 10px 28px #000a;padding:4px;z-index:32}
+#countriesDrop button{display:block;width:100%;text-align:left;background:transparent;border:0;color:#e8eef3;font:500 13px/1.3 system-ui,sans-serif;padding:8px 10px;border-radius:7px;cursor:pointer}
+#countriesDrop button:hover,#countriesDrop button:focus{background:#243a55;outline:none}
+#countriesDrop .empty{padding:10px;opacity:.55;font:12px system-ui,sans-serif;color:#c5d0dc}
+#placeTab{position:absolute;left:0;top:calc(100% + 6px);width:min(280px,78vw);z-index:31;cursor:pointer;
+  transform:translateY(-10px);opacity:0;visibility:hidden;pointer-events:none;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s ease,visibility 0s linear .28s}
+#placeTab.on{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s ease,visibility 0s}
+#placeTab .ptIn{background:#fffbe9;color:#222;border-radius:12px;padding:10px 12px 10px 10px;border:3px solid #ffd34d;box-shadow:0 8px 22px #0008;display:flex;gap:10px;align-items:flex-start}
+#placeTab .ptFlag{width:36px;height:24px;object-fit:cover;border-radius:3px;box-shadow:0 1px 3px #0005;flex:none;background:#ddd}
+#placeTab .ptBody{min-width:0;flex:1}
+#placeTab .ptBody strong{display:block;font:700 13px/1.2 system-ui,sans-serif;margin:0 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#placeTab .ptBody span{display:block;font:12px/1.35 system-ui,sans-serif;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#placeTab .ptHint{font:10px/1 system-ui,sans-serif;opacity:.5;margin-top:4px}
+#card{cursor:default}
+#card .cardIn{cursor:default;max-height:min(80vh,560px);overflow:auto}
