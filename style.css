@@ -151,9 +151,9 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #pouchWrap[hidden]{display:none!important}
 #coinCount{font:800 16px/1 system-ui,sans-serif;color:#ffe08a;text-shadow:0 1px 3px #000c;min-width:2ch;text-align:center}
 #pouch{width:56px;height:auto;display:block;image-rendering:auto}
-.coinFly{position:fixed;z-index:28;width:18px;height:18px;margin:-9px 0 0 -9px;background:url(img/coin.png) center/contain no-repeat;pointer-events:none;will-change:transform,left,top;filter:drop-shadow(0 1px 2px #000a)}
-.coinFly.spin{animation:coinSpin 2.4s linear infinite}
-@keyframes coinSpin{to{transform:rotateY(360deg)}}
+.coinFly{position:fixed;z-index:28;width:18px;height:18px;margin:-9px 0 0 -9px;background:url(img/coin-spin.png) 0 0 no-repeat;background-size:auto 100%;pointer-events:none;will-change:left,top,background-position;filter:drop-shadow(0 1px 2px #000a);image-rendering:auto}
+.coinFly.spin{/* frame advance handled in tickCoins via background-position */}
+#pouch{image-rendering:auto}
 .coinBurst{position:fixed;z-index:29;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle,#fff 0%,#ffe08a 40%,transparent 70%);pointer-events:none;animation:coinPop .35s ease-out forwards}
 @keyframes coinPop{to{transform:scale(3);opacity:0}}
 

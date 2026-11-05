@@ -420,19 +420,31 @@ function setCoins(n){coins=Math.max(0,n|0);if(coinCountEl)coinCountEl.textConten
 function addCoins(n){setCoins(coins+n)}
 function updMachCosts(){for(const el of machWrap.querySelectorAll('.mach')){const c=+el.dataset.cost||0;const costEl=el.querySelector('.machCost');if(costEl){costEl.textContent='🪙 '+c;costEl.classList.toggle('broke',coins<c);}}}
 function beepMach(){try{const ctx=dac()||DAC;if(!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type='square';o.frequency.value=880;g.gain.value=muted?0:.05;o.connect(g);g.connect(ctx.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.12);o.stop(ctx.currentTime+.14);setTimeout(()=>{const o2=ctx.createOscillator(),g2=ctx.createGain();o2.type='square';o2.frequency.value=1320;g2.gain.value=muted?0:.04;o2.connect(g2);g2.connect(ctx.destination);o2.start();g2.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.1);o2.stop(ctx.currentTime+.12);},90);}catch(e){}}
+// Stylised canopy height in screen px (city trees ~0.005 world ≈ R/300; floor so hover stays readable at globe zoom).
+function coinTreePx(){const R=(window.G3&&G3.screenRadius)?G3.screenRadius():240;return Math.max(10,Math.min(16,R*0.042));}
 function burstCoinsAt(x,y,n){n=n||5;const zoom=Math.max(.55,Math.min(1.15,(window.G3&&G3.screenRadius?G3.screenRadius():220)/280));
- for(let i=0;i<n;i++){const el=document.createElement('div');el.className='coinFly';const sz=Math.round(14+8*zoom);el.style.width=sz+'px';el.style.height=sz+'px';el.style.margin=(-sz/2)+'px 0 0 '+(-sz/2)+'px';
-  const ang=-Math.PI/2+(Math.random()-.5)*1.1,spd=380+Math.random()*420;const c={el,x,y,vx:Math.cos(ang)*spd*(.7+Math.random()*.5),vy:Math.sin(ang)*spd*(.85+Math.random()*.4),phase:'up',peak:y-(48+Math.random()*55)*zoom,frozen:false,ang:Math.random()*360,spin:180+Math.random()*220,born:performance.now()};
+ const tree=coinTreePx(),peakLift=tree*2; // hover peak ≈ twice treetops above the country surface
+ for(let i=0;i<n;i++){const el=document.createElement('div');el.className='coinFly';const sz=Math.round(16+10*zoom);el.style.width=sz+'px';el.style.height=sz+'px';el.style.margin=(-sz/2)+'px 0 0 '+(-sz/2)+'px';
+  el.style.backgroundSize=(sz*8)+'px '+sz+'px';el.style.backgroundPosition='0 0';
+  // Burst is still snappy, but apex is the low peak (no sky-high arc).
+  const lift=peakLift*(.88+Math.random()*.24),peak=y-lift;
+  const ang=-Math.PI/2+(Math.random()-.5)*.55; // mostly straight up
+  const spd=Math.sqrt(2*1500*lift)*(0.92+Math.random()*0.2); // physics apex ≈ peak
+  const c={el,x,y,vx:Math.cos(ang)*spd*(.35+Math.random()*.35),vy:Math.sin(ang)*spd,phase:'up',peak,frozen:false,ang:Math.random()*360,spin:220+Math.random()*160,born:performance.now(),frame:0,sz};
   el.style.left=x+'px';el.style.top=y+'px';document.body.appendChild(el);freeCoins.push(c);}
  if(!burstCoinsAt._raf)burstCoinsAt._raf=requestAnimationFrame(tickCoins);}
+function coinSetFrame(c){const n=8;const fi=((Math.floor(c.ang/45)%n)+n)%n;if(fi===c.frame)return;c.frame=fi;c.el.style.backgroundPosition=(-fi*c.sz)+'px 0';}
 function tickCoins(t){burstCoinsAt._raf=0;const dt=Math.min(.032,(tickCoins._t? (t-tickCoins._t):16)/1000);tickCoins._t=t;const MAG=120;
  for(let i=freeCoins.length-1;i>=0;i--){const c=freeCoins[i];
-  if(c.phase==='up'){c.vy+=1400*dt;c.x+=c.vx*dt;c.y+=c.vy*dt;c.vx*=.985;if(c.vy>0&&c.y>=c.peak){c.y=c.peak;c.vy=0;c.vx*=.2;c.phase='hover';c.el.classList.add('spin');c.el.style.transform='';}}
-  else if(c.phase==='hover'){c.ang+=c.spin*dt;c.x+=Math.sin(t/400+c.ang)*4*dt;const dx=mx-c.x,dy=my-c.y,d=Math.hypot(dx,dy);
+  if(c.phase==='up'){c.vy+=1500*dt;c.x+=c.vx*dt;c.y+=c.vy*dt;c.vx*=.985;
+   if(c.y<c.peak){c.y=c.peak;c.vy=0;} // never overshoot the treetop peak
+   c.ang+=c.spin*dt;coinSetFrame(c);
+   if(c.vy>=0&&c.y>=c.peak-0.5){c.y=c.peak;c.vy=0;c.vx*=.15;c.phase='hover';c.el.classList.add('spin');}}
+  else if(c.phase==='hover'){c.ang+=c.spin*dt;coinSetFrame(c);c.x+=Math.sin(t/450+c.ang)*.9*dt;c.y=c.peak+Math.sin(t/380+c.ang*.7)*1.2;const dx=mx-c.x,dy=my-c.y,d=Math.hypot(dx,dy);
    if(d<MAG&&d>1){c.phase='magnet';c.el.classList.remove('spin');}}
-  else if(c.phase==='magnet'){const dx=mx-c.x,dy=my-c.y,d=Math.hypot(dx,dy)||1;const pull=Math.min(4200,1400+3200*(1-Math.min(d,MAG)/MAG));c.vx=c.vx*.55+(dx/d)*pull*dt*60;c.vy=c.vy*.55+(dy/d)*pull*dt*60;c.x+=c.vx*dt;c.y+=c.vy*dt;
+  else if(c.phase==='magnet'){const dx=mx-c.x,dy=my-c.y,d=Math.hypot(dx,dy)||1;const pull=Math.min(4200,1400+3200*(1-Math.min(d,MAG)/MAG));c.vx=c.vx*.55+(dx/d)*pull*dt*60;c.vy=c.vy*.55+(dy/d)*pull*dt*60;c.x+=c.vx*dt;c.y+=c.vy*dt;c.ang+=c.spin*dt;coinSetFrame(c);
    if(d<18){const b=document.createElement('div');b.className='coinBurst';b.style.left=c.x+'px';b.style.top=c.y+'px';document.body.appendChild(b);setTimeout(()=>b.remove(),360);c.el.remove();freeCoins.splice(i,1);addCoins(1);play('place');continue;}}
-  c.el.style.left=c.x+'px';c.el.style.top=c.y+'px';if(c.phase==='hover')c.el.style.transform=`rotate(${(c.ang%360)|0}deg)`;}
+  c.el.style.left=c.x+'px';c.el.style.top=c.y+'px';}
  if(freeCoins.length)burstCoinsAt._raf=requestAnimationFrame(tickCoins);else tickCoins._t=0;}
 function spawnPlaceCoins(p){if(!p||!window.G3)return;const c=p.f.c;if(!G3.facing(c[0],c[1]))return;const [x,y]=G3.project(c[0],c[1]);const n=4+((Math.random()*3)|0);burstCoinsAt(x,y,n);}
 
@@ -677,7 +689,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,addSpace,remSpace,enterOrbit,isUiBlocked,dismissCard,showPlaceTab,openCountryCard,updCountriesUI,hidePlaceTab,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,coinTreePx,setCoins,addCoins,addSpace,remSpace,enterOrbit,isUiBlocked,dismissCard,showPlaceTab,openCountryCard,updCountriesUI,hidePlaceTab,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();
