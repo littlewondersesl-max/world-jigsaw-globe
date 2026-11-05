@@ -298,6 +298,47 @@ function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)fo
 const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')syncDrawers();};
 addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
 syncDrawers();kick();
+// ---------- pause menu + save / load (localStorage) ----------
+const SAVE_KEY='worldJigsaw.save.v1';
+function snapshot(){return {v:1,t:Date.now(),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
+ quat:G3.quat(),cam:G3.cam(),drawers:{L:DR.L.open,R:DR.R.open},placed:[...placed],anc:anc?{n:anc.p.f.name,step:anc.step}:null,
+ pieces:pieces.map(p=>{const o={n:p.f.name,angle:p.angle,hint:p.hint};if(placed.has(p.f.name))o.st='placed';else if(p.parked){o.st='parked';o.lon=p.lon;o.lat=p.lat;o.s=p.s;}
+  else if(p.body){o.st=p.dloc;o.x=p.body.x;o.y=p.body.y;o.sec=p.body.sec;}else o.st='L';return o;})};}
+function saveGame(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));toast('Game saved');}catch(e){toast('Could not save: '+e.message);}updPause();}
+function readSave(){try{return JSON.parse(localStorage.getItem(SAVE_KEY)||'null');}catch(e){return null}}
+function cancelHeld(){if(carrying){dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return true}
+ if(drag){const d=drag;d.el.onpointermove=d.el.onpointerup=d.el.onpointercancel=null;drag=null;ghost.remove();d.el.style.opacity='';return true}return false}
+function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();$('card').hidden=true;$('flagPop').hidden=true;
+ const o=S.opts||{};$('easy').checked=!!o.easy;$('lbl').checked=o.lbl!==false;G3.labels($('lbl').checked);$('bg').value=o.bg||'0';G3.setBg(+$('bg').value);muted=!!o.muted;$('mute').textContent=muted?'🔇':'🔊';
+ $('set').value=S.set;setPrev=S.set;buildSet();
+ const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;return p}).filter(Boolean);
+ stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;
+ G3.setQuat(S.quat);
+ for(const n of S.placed){const p=byN[n];if(!p)continue;placed.add(n);G3.placeNow(p.f,FACTS[n][0]);for(const c of cols(n)){const st=document.createElement('div');st.className='stripe';st.style.background=c;st.style.height=(100/stripeTotal)+'%';$('tubeFill').appendChild(st);}}
+ for(const q of S.pieces)if(q.st==='parked')park(byN[q.n],[q.lon,q.lat],q.s);
+ if(S.anc){const p=byN[S.anc.n];if(p&&p.parked){anc={p,step:S.anc.step};p.ov.classList.add('anc');p.ov.style.cursor='default';p.ov.addEventListener('pointerdown',ancDown);if(anc.step==='lat')G3.outline(p.f);else if(anc.step==='blink')nextStep();}}
+ for(const q of S.pieces)if(q.st==='L'||q.st==='R'){const p=byN[q.n];if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}
+ DR.L.glide=DR.R.glide=0;DR.L.open=S.drawers.L;DR.R.open=S.drawers.R;for(const s in DR){DR[s].pv=DR[s].open;DR[s].v=0;}
+ sel=null;renderTray();for(const s in DR)for(const b of DR[s].bodies){b.vx=b.vy=0;}
+ if(S.cam)G3.setCam(S.cam);updHints();progress();kick();toast('Game loaded');return true;}
+const pz=document.createElement('div');pz.id='pause';pz.hidden=true;pz.innerHTML='<div class="pb"><h3>Paused</h3><button id="pzRes">Resume</button><button id="pzSave">Save game</button><button id="pzLoad">Load saved game</button><div id="pzInfo"></div></div>';document.body.appendChild(pz);
+const tst=document.createElement('div');tst.id='toast';document.body.appendChild(tst);
+function toast(t){tst.textContent=t;tst.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>tst.classList.remove('on'),1800);}
+function updPause(){const S=readSave();$('pzLoad').disabled=!S;$('pzInfo').textContent=S?'Saved: '+new Date(S.t).toLocaleString()+' · '+S.placed.length+' placed':'No saved game yet';}
+function openPause(){cancelHeld();updPause();pz.hidden=false;$('pzRes').focus({preventScroll:true});}
+function closePause(){pz.hidden=true;}
+$('pzRes').onclick=closePause;$('pzSave').onclick=()=>{saveGame();};
+$('pzLoad').onclick=()=>{const S=readSave();if(!S)return;if((placed.size||parked.length||anc)&&!confirm('Load your saved game? Your current progress will be replaced.'))return;closePause();loadGame(S);};
+pz.onclick=e=>{if(e.target===pz)closePause()};
+addEventListener('keydown',e=>{if(e.key!=='Escape')return;
+ if(carrying)return;// the carry handler drops the piece first
+ if(drag){cancelHeld();e.stopImmediatePropagation();return}
+ if(!pz.hidden){closePause();e.stopImmediatePropagation();return}
+ if(!$('card').hidden||!$('credP').hidden)return;// Esc closes those first
+ if(e.target.closest&&e.target.closest('select'))return;
+ openPause();},true);
+{const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();
 (function(){const B=document.getElementById('menuB'),L=document.getElementById('menuL'),P=document.getElementById('credP');if(!B)return;

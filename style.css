@@ -83,3 +83,9 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 .dL .din:after{content:"";position:absolute;left:70px;right:70px;top:64px;bottom:96px;border-radius:14px;background:url(wood_teal.jpg) center/384px;filter:brightness(.82);box-shadow:inset 0 10px 22px #000a,inset 0 -3px 6px #fff3,inset 0 0 0 3px #0005,0 0 0 6px #ffffff1c,0 0 0 7px #0006;pointer-events:none;z-index:0}
 
 #dwrap,#dwrap *{-webkit-user-select:none;user-select:none}
+
+#pause{position:fixed;inset:0;z-index:9999;background:#0009;display:flex;align-items:center;justify-content:center;font:15px system-ui,sans-serif}#pause[hidden]{display:none}
+#pause .pb{background:#1d130b;color:#f3e6d3;border:1px solid #6b4a2b;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-width:240px;box-shadow:0 10px 40px #000a}
+#pause h3{margin:0 0 4px;text-align:center}#pause button{background:#3a2716;color:#f3e6d3;border:1px solid #6b4a2b;border-radius:8px;padding:9px 12px;font:inherit;cursor:pointer}#pause button:hover:not(:disabled){background:#4d351e}#pause button:disabled{opacity:.45;cursor:default}
+#pzInfo{font-size:12px;opacity:.7;text-align:center}
+#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#fff;color:#222;padding:7px 16px;border-radius:14px;font:bold 14px system-ui,sans-serif;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:10000}#toast.on{opacity:1;transform:translate(-50%,0)}
