@@ -222,7 +222,7 @@ for(const side of ['L','R']){const d=document.createElement('div');d.className='
   o.h.onpointermove=ev=>{const W=innerWidth,dx=ev.clientX-x0;setOpen(o,a0+(side==='L'?dx:-dx));const t=performance.now();o.fling=(side==='L'?1:-1)*(ev.clientX-lx)/Math.max(1,t-lt)*16;lx=ev.clientX;lt=t;};
   o.h.onpointerup=o.h.onpointercancel=()=>{o.h.onpointermove=o.h.onpointerup=o.h.onpointercancel=null;o.glide=o.fling||0;o.fling=0;kick();};});}
 function oth(o){return DR[o.side==='L'?'R':'L']}
-function setOpen(o,v){const W=innerWidth;v=Math.max(0,Math.min(W-22,v));// keep the handle on-screen so a fully open drawer can always be closed
+function setOpen(o,v){const W=innerWidth;v=Math.max(0,Math.min(W-44,v));// keep this handle on-screen AND clear of the other drawer's handle
 o.open=v;const q=oth(o);if(v+q.open>W)q.open=W-v;kick();}
 function secRects(){const o=DR.R,W=innerWidth,H=innerHeight,cols=W>H?6:2,rows=W>H?1:3,cw=W/cols,rh=(H-0)/rows;return CONTS.map((c,i)=>({c,x:(i%cols)*cw,y:Math.floor(i/cols)*rh,w:cw,h:rh}));}
 function layoutSecs(){const R=secRects();[...DR.R.in.querySelectorAll('.sec')].forEach((s,i)=>{const r=R[i];Object.assign(s.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px'})});}
@@ -253,7 +253,7 @@ function collide(a,c){const A=bodyShape(a.p),C=bodyShape(c.p),dx=c.x-a.x,dy=c.y-
 function clampB(o,b){const r=bounds(o,b),S=bodyShape(b.p);if(b.x+S.x0<r.x){b.x=r.x-S.x0;b.vx=Math.abs(b.vx)*.3}if(b.x+S.x1>r.x+r.w){b.x=r.x+r.w-S.x1;b.vx=-Math.abs(b.vx)*.3}if(b.y+S.y0<r.y){b.y=r.y-S.y0;b.vy=Math.abs(b.vy)*.3}if(b.y+S.y1>r.y+r.h){b.y=r.y+r.h-S.y1;b.vy=-Math.abs(b.vy)*.3}}
 let raf=0,calm=0,budget=0;function kick(){budget=performance.now()+2500;if(!raf)raf=requestAnimationFrame(step);}function tick(){if(!raf)raf=requestAnimationFrame(step);}
 function step(){raf=0;let busy=false;const W=innerWidth;
- for(const s in DR){const o=DR[s];if(o.glide){setOpen(o,o.open+o.glide);o.glide*=.86;if(Math.abs(o.glide)<.3||o.open<=0||o.open>=W-22)o.glide=0;}
+ for(const s in DR){const o=DR[s];if(o.glide){setOpen(o,o.open+o.glide);o.glide*=.86;if(Math.abs(o.glide)<.3||o.open<=0||o.open>=W-44)o.glide=0;}
   if(o.open<24&&!o.h.onpointermove&&!o.glide&&o.open>0)o.open=Math.max(0,o.open-4);
   const v=o.open-o.pv;const acc=v-o.v;o.v=v;o.pv=o.open;if(Math.abs(v)>.05||o.glide)busy=true;
   o.el.style.transform=s==='L'?`translateX(${o.open-W}px)`:`translateX(${W-o.open}px)`;o.el.classList.toggle('shut',o.open<1);
