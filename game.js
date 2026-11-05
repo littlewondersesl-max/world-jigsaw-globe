@@ -175,7 +175,7 @@ $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=
 $('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c,Math.max(1.4,Math.min(3,6.2/(1+19*p.f.rad))));G3.pulse(p.f,5000);$('hintText').innerHTML+='<br>✨ Look for the yellow glow!';updHints();};
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';};
 const SETVIEW={Africa:[20,2],Asia:[90,30],Europe:[15,50],Americas:[-80,8],Oceania:[150,-25]};
-$('set').onchange=e=>{buildSet();const v=SETVIEW[e.target.value];if(v)spinTo(v,1);};// face the chosen region instead of leaving the old view
+let setPrev=$('set').value;$('set').onchange=e=>{if((placed.size||parked.length)&&!confirm('Start a new puzzle? The pieces you have placed will be cleared.')){e.target.value=setPrev;return;}setPrev=e.target.value;buildSet();const v=SETVIEW[e.target.value];if(v)spinTo(v,1);};// face the chosen region instead of leaving the old view
 $('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl').onchange=e=>G3.labels(e.target.checked);
 // ---------- load ----------
 (window.G3?Promise.resolve():new Promise(r=>addEventListener('g3ready',r,{once:true}))).then(()=>fetch('data/countries-110m.json')).then(r=>r.json()).then(t=>{const geoms=t.objects.countries.geometries;
