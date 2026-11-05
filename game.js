@@ -294,7 +294,7 @@ window.__release=release;
 let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';
  drag={p,el:src,x:e.clientX,y:e.clientY,moved:true};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
  const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;
- const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{if(ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,#machines,header')){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}// double-click: keep holding
+ const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{const skip=ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,#machines,header');if(skip&&!(ev.target.closest&&ev.target.closest('.mach'))){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}// double-click: keep holding
   downs++;ev.stopPropagation();ev.preventDefault();},
   up=ev=>{if(hd){hd=0;return;}const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
    removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);removeEventListener('keydown',esc);
@@ -357,9 +357,25 @@ function provDrop(pf,x,y,el){if(provFits(pf,x,y)){placeProv(pf);return}play('mis
 const MACH=[{id:'size',title:'Sizeinator',blurb:'Puts a piece at true globe size',icon:'⤢'},
  {id:'orient',title:'Orientationator',blurb:'Turns a piece north-up',icon:'⟲'},
  {id:'find',title:'Finderator',blurb:'Hot & cold % toward the right spot',icon:'📡'}];
-const machWrap=document.createElement('div');machWrap.id='machines';
-machWrap.innerHTML=MACH.map(m=>`<div class="mach" data-id="${m.id}" title="${m.blurb}"><b>${m.icon}</b><span>${m.title}</span></div>`).join('');
-document.body.appendChild(machWrap);machWrap.hidden=true;
+const machWrap=document.getElementById('machines');
+machWrap.innerHTML='<div class="machLab">Machines</div><div class="machRow">'+MACH.map(m=>`<div class="mach" data-id="${m.id}" title="${m.blurb}"><b>${m.icon}</b><span>${m.title}</span></div>`).join('')+'</div>';
+machWrap.hidden=true;
+
+const hintsEl=document.getElementById('hints');
+const hintsToggle=document.getElementById('hintsToggle');
+const HINTS_KEY='worldJigsaw.hintsOpen';
+function setHintsOpen(open){
+  hintsEl.classList.toggle('collapsed',!open);
+  hintsToggle.setAttribute('aria-expanded',open?'true':'false');
+  hintsToggle.textContent=open?'▾':'▸';
+  try{localStorage.setItem(HINTS_KEY,open?'1':'0')}catch(e){}
+}
+(function initHints(){
+  let open=true;
+  try{const v=localStorage.getItem(HINTS_KEY);if(v==='0')open=false;else if(v==='1')open=true}catch(e){}
+  setHintsOpen(open);
+})();
+hintsToggle.addEventListener('click',()=>setHintsOpen(hintsEl.classList.contains('collapsed')));
 function machineAt(x,y){for(const el of machWrap.querySelectorAll('.mach')){const r=el.getBoundingClientRect();
  if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return el.dataset.id}return null}
 function hiliteMach(x,y){const id=machineAt(x,y);for(const el of machWrap.querySelectorAll('.mach'))el.classList.toggle('over',el.dataset.id===id)}
