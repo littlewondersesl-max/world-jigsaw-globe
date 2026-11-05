@@ -277,7 +277,7 @@ window.__release=release;
 let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';
  drag={p,el:src,x:e.clientX,y:e.clientY,moved:true};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
  const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;
- const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{if(ev.target.closest&&ev.target.closest('.dh')){hd=1;return;}downs++;ev.stopPropagation();ev.preventDefault();},
+ const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{if(ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,header')){hd=1;return;}downs++;ev.stopPropagation();ev.preventDefault();},
   up=ev=>{if(hd){hd=0;return;}const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
    removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);removeEventListener('keydown',esc);
    drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY);};
