@@ -155,7 +155,7 @@ function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||
  if(fits(p,ll)){unpark(p);place(p);return;}
  park(p,ll,1);say(neighbourHint(p,ll),2200);}
 function neighbourHint(p,ll){const f=p.f,tol=Math.max(0.09,f.rad*0.9);return (d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll))&&Math.abs(angOff(p.angle))>25?'Right place! Now turn it to fit ⟲ ⟳':'Parked here. It joins when the puzzle reaches it.';}
-function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);if(!inJoin)joinParked();}
+function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();}
 function progress(){updScreen();$('progress').textContent=`${placed.size} / ${pieces.length}`;}
 // flag + tube
 function celebrate(n){const fl=FLAGS[n];const pop=$('flagPop');if(!fl){showCard(n);return;}$('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
@@ -286,7 +286,7 @@ function step(){raf=0;let busy=false;const W=innerWidth;
 function drawerAt(x,y){const W=innerWidth;if(DR.L.open>0&&x<DR.L.open)return {side:'L',x:x+W-DR.L.open,y};if(DR.R.open>0&&x>W-DR.R.open)return {side:'R',x:x-(W-DR.R.open),y};return null;}
 function secAt(lx,ly){const r=secRects().find(r=>lx>=r.x&&lx<r.x+r.w&&ly>=r.y&&ly<r.y+r.h);return r?r.c:null;}
 // release a held piece: into a drawer, else onto the globe (anything not placed/parked goes back to the left drawer)
-function release(p,x,y){hiliteMach(-1,-1);const mk=machineAt(x,y);if(mk){runMachine(mk,p);if(p.parked){renderTray();return}if(p.body){renderTray();return}if(!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();return;}
+function release(p,x,y){hiliteMach(-1,-1);const mk=machineAt(x,y);if(mk){beginMachineRun(mk,p).then(ok=>{if(ok)return;if(p.parked){renderTray();return}if(p.body){renderTray();return}if(!placed.has(p.f.name)&&!p.onPlat){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();});return;}
  const d=drawerAt(x,y);if(d){if(p.parked)unpark(p);addBody(d.side,p,d.x,d.y,true,d.side==='R'?secAt(d.x,d.y):null);renderTray();return;}
  drop(p,x,y);if(!placed.has(p.f.name)&&!p.parked&&!p.body){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}syncDrawers();}
 window.__release=release;
@@ -353,13 +353,53 @@ function provFits(pf,x,y){const ll=G3.pick(x,y);if(!ll)return false;if(d3.geoCon
  if(G3.facing(pf.c[0],pf.c[1])){const [px,py]=G3.project(pf.c[0],pf.c[1]);if(Math.hypot(px-x,py-y)<22)return true}return false}
 function provDrop(pf,x,y,el){if(provFits(pf,x,y)){placeProv(pf);return}play('miss');el.animate([{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'none'}],{duration:280});}
 
-// ---------- Finderator meter + the three machines ----------
-const MACH=[{id:'size',title:'Sizeinator',blurb:'Puts a piece at true globe size',icon:'⤢'},
- {id:'orient',title:'Orientationator',blurb:'Turns a piece north-up',icon:'⟲'},
- {id:'find',title:'Finderator',blurb:'Hot & cold % toward the right spot',icon:'📡'}];
+// ---------- Coins + metallic conveyor machines ----------
+let coins=0;
+const pouchWrap=document.getElementById('pouchWrap');
+const coinCountEl=document.getElementById('coinCount');
+const freeCoins=[]; // {el,x,y,vx,vy,phase,peak,frozen,ang}
+let mx=0,my=0;
+addEventListener('pointermove',e=>{mx=e.clientX;my=e.clientY;for(const c of freeCoins){if(c.phase==='hover'){const d=Math.hypot(mx-c.x,my-c.y);if(d<120){c.phase='magnet';c.el.classList.remove('spin');}}}if(freeCoins.length&&!burstCoinsAt._raf)burstCoinsAt._raf=requestAnimationFrame(tickCoins);},{passive:true});
+function setCoins(n){coins=Math.max(0,n|0);if(coinCountEl)coinCountEl.textContent=String(coins);updMachCosts();try{/* live */}catch(e){}}
+function addCoins(n){setCoins(coins+n)}
+function updMachCosts(){for(const el of machWrap.querySelectorAll('.mach')){const c=+el.dataset.cost||0;const costEl=el.querySelector('.machCost');if(costEl){costEl.textContent='🪙 '+c;costEl.classList.toggle('broke',coins<c);}}}
+function beepMach(){try{const ctx=dac()||DAC;if(!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type='square';o.frequency.value=880;g.gain.value=muted?0:.05;o.connect(g);g.connect(ctx.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.12);o.stop(ctx.currentTime+.14);setTimeout(()=>{const o2=ctx.createOscillator(),g2=ctx.createGain();o2.type='square';o2.frequency.value=1320;g2.gain.value=muted?0:.04;o2.connect(g2);g2.connect(ctx.destination);o2.start();g2.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.1);o2.stop(ctx.currentTime+.12);},90);}catch(e){}}
+function burstCoinsAt(x,y,n){n=n||5;const zoom=Math.max(.55,Math.min(1.15,(window.G3&&G3.screenRadius?G3.screenRadius():220)/280));
+ for(let i=0;i<n;i++){const el=document.createElement('div');el.className='coinFly';const sz=Math.round(14+8*zoom);el.style.width=sz+'px';el.style.height=sz+'px';el.style.margin=(-sz/2)+'px 0 0 '+(-sz/2)+'px';
+  const ang=-Math.PI/2+(Math.random()-.5)*1.1,spd=380+Math.random()*420;const c={el,x,y,vx:Math.cos(ang)*spd*(.7+Math.random()*.5),vy:Math.sin(ang)*spd*(.85+Math.random()*.4),phase:'up',peak:y-(48+Math.random()*55)*zoom,frozen:false,ang:Math.random()*360,spin:180+Math.random()*220,born:performance.now()};
+  el.style.left=x+'px';el.style.top=y+'px';document.body.appendChild(el);freeCoins.push(c);}
+ if(!burstCoinsAt._raf)burstCoinsAt._raf=requestAnimationFrame(tickCoins);}
+function tickCoins(t){burstCoinsAt._raf=0;const dt=Math.min(.032,(tickCoins._t? (t-tickCoins._t):16)/1000);tickCoins._t=t;const MAG=120;
+ for(let i=freeCoins.length-1;i>=0;i--){const c=freeCoins[i];
+  if(c.phase==='up'){c.vy+=1400*dt;c.x+=c.vx*dt;c.y+=c.vy*dt;c.vx*=.985;if(c.vy>0&&c.y>=c.peak){c.y=c.peak;c.vy=0;c.vx*=.2;c.phase='hover';c.el.classList.add('spin');c.el.style.transform='';}}
+  else if(c.phase==='hover'){c.ang+=c.spin*dt;c.x+=Math.sin(t/400+c.ang)*4*dt;const dx=mx-c.x,dy=my-c.y,d=Math.hypot(dx,dy);
+   if(d<MAG&&d>1){c.phase='magnet';c.el.classList.remove('spin');}}
+  else if(c.phase==='magnet'){const dx=mx-c.x,dy=my-c.y,d=Math.hypot(dx,dy)||1;const pull=Math.min(4200,1400+3200*(1-Math.min(d,MAG)/MAG));c.vx=c.vx*.55+(dx/d)*pull*dt*60;c.vy=c.vy*.55+(dy/d)*pull*dt*60;c.x+=c.vx*dt;c.y+=c.vy*dt;
+   if(d<18){const b=document.createElement('div');b.className='coinBurst';b.style.left=c.x+'px';b.style.top=c.y+'px';document.body.appendChild(b);setTimeout(()=>b.remove(),360);c.el.remove();freeCoins.splice(i,1);addCoins(1);play('place');continue;}}
+  c.el.style.left=c.x+'px';c.el.style.top=c.y+'px';if(c.phase==='hover')c.el.style.transform=`rotate(${(c.ang%360)|0}deg)`;}
+ if(freeCoins.length)burstCoinsAt._raf=requestAnimationFrame(tickCoins);else tickCoins._t=0;}
+function spawnPlaceCoins(p){if(!p||!window.G3)return;const c=p.f.c;if(!G3.facing(c[0],c[1]))return;const [x,y]=G3.project(c[0],c[1]);const n=4+((Math.random()*3)|0);burstCoinsAt(x,y,n);}
+
+const MACH=[{id:'size',title:'Sizeinator',blurb:'True globe size',cost:3,img:'img/mach-size.png'},
+ {id:'orient',title:'Orientationator',blurb:'Turns north-up',cost:3,img:'img/mach-orient.png'},
+ {id:'find',title:'Finderator',blurb:'Hot & cold meter',cost:5,img:'img/mach-find.png'}];
 const machWrap=document.getElementById('machines');
-machWrap.innerHTML='<div class="machLab">Machines</div><div class="machRow">'+MACH.map(m=>`<div class="mach" data-id="${m.id}" title="${m.blurb}"><b>${m.icon}</b><span>${m.title}</span></div>`).join('')+'</div>';
+if(machWrap.parentElement!==document.body)document.body.appendChild(machWrap);
+machWrap.innerHTML=MACH.map(m=>`<div class="mach" data-id="${m.id}" data-cost="${m.cost}" title="${m.blurb} · ${m.cost} coins">
+  <div class="machPlat" title="Pick up"></div>
+  <div class="outBelt"></div>
+  <img class="machImg" src="${m.img}" alt="${m.title}" draggable="false">
+  <div class="machMeta"><span class="machName">${m.title}</span><span class="machCost">🪙 ${m.cost}</span></div>
+  <div class="inBelt" title="Drop piece on belt"></div>
+</div>`).join('');
 machWrap.hidden=true;
+const machById={};for(const el of machWrap.querySelectorAll('.mach'))machById[el.dataset.id]=el;
+for(const el of machWrap.querySelectorAll('.machPlat'))el.addEventListener('pointerdown',e=>{
+  e.preventDefault();e.stopPropagation();
+  const m=el.closest('.mach');const p=m&&m._platP;if(!p)return;
+  m._platP=null;m.classList.remove('hasPlat');el.innerHTML='';
+  p.onPlat=null;if(p.body)remBody(p);carry(p,e,el);
+});
 
 const hintsEl=document.getElementById('hints');
 const hintsToggle=document.getElementById('hintsToggle');
@@ -376,15 +416,65 @@ function setHintsOpen(open){
   setHintsOpen(open);
 })();
 hintsToggle.addEventListener('click',()=>setHintsOpen(hintsEl.classList.contains('collapsed')));
-function machineAt(x,y){for(const el of machWrap.querySelectorAll('.mach')){const r=el.getBoundingClientRect();
- if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return el.dataset.id}return null}
-function hiliteMach(x,y){const id=machineAt(x,y);for(const el of machWrap.querySelectorAll('.mach'))el.classList.toggle('over',el.dataset.id===id)}
-function runMachine(kind,p){if(!p||placed.has(p.f.name))return false;
- if(kind==='size'){p.s=1;say('Sizeinator: true size ✓',1600);play('place');return true}
- if(kind==='orient'){setAngle(p,0);say('Orientationator: north-up ✓',1600);play('place');return true}
+
+function machMouth(el){const r=el.getBoundingClientRect();return {x:r.left+r.width*0.22,y:r.top+r.height*0.58};}
+function machineAt(x,y){for(const el of machWrap.querySelectorAll('.mach')){if(el.classList.contains('busy'))continue;
+  const belt=el.querySelector('.inBelt');const br=belt.getBoundingClientRect();
+  const near=el.classList.contains('near')||el.classList.contains('over')||br.width>20;
+  if(near&&x>=br.left-6&&x<=br.right+8&&y>=br.top-10&&y<=br.bottom+10)return el.dataset.id;
+  const r=el.getBoundingClientRect();const mouthX=r.left+r.width*0.35;
+  if(x>=r.left&&x<=mouthX&&y>=r.top+r.height*0.25&&y<=r.bottom-r.height*0.15)return el.dataset.id;}
+ return null}
+function hiliteMach(x,y){if(machWrap.hidden)return;for(const el of machWrap.querySelectorAll('.mach')){
+  if(el.classList.contains('busy')){el.classList.remove('near','over');continue;}
+  const m=machMouth(el);const d=Math.hypot(x-m.x,y-m.y);const near=d<130;el.classList.toggle('near',near);
+  const id=machineAt(x,y);el.classList.toggle('over',el.dataset.id===id);}}
+function applyMachEffect(kind,p){if(kind==='size'){p.s=1;say('Sizeinator: true size ✓',1600);return true}
+ if(kind==='orient'){setAngle(p,0);say('Orientationator: north-up ✓',1600);return true}
  if(kind==='find'){if(p.finderLost){say('Finderator already spent on this piece',1800);return false}
-  enableFinder(p);say('Finderator: hot & cold meter on — drag toward the spot',2600);play('place');return true}
+  enableFinder(p);say('Finderator: hot & cold meter on — drag toward the spot',2600);return true}
  return false}
+function runMachine(kind,p){return applyMachEffect(kind,p)}
+function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+async function beginMachineRun(kind,p){const el=machById[kind];if(!el||!p||placed.has(p.f.name))return false;
+ const cost=+el.dataset.cost||0;
+ if(coins<cost){say('Not enough coins for the '+el.querySelector('.machName').textContent+' (need '+cost+')',2200);play('miss');return false;}
+ if(el.classList.contains('busy')||el._platP){say('That machine is busy — pick up the piece on its platform first',2200);return false;}
+ if(kind==='find'&&p.finderLost){say('Finderator already spent on this piece',1800);return false;}
+ setCoins(coins-cost);el.classList.add('busy','near');
+ // clear piece from drawers/park
+ if(p.parked)unpark(p);if(p.body)remBody(p);p.onPlat=null;
+ const g=shapeSVG(p.f,trayScale(p.f)*.7);
+ const ride=document.createElement('div');ride.className='ride';ride.innerHTML=g.svg;const sv=ride.firstChild;if(sv){sv.setAttribute('width',56);sv.setAttribute('height',56);sv.style.transform=`rotate(${p.angle}deg)`;}
+ document.body.appendChild(ride);
+ const mouth=machMouth(el);const belt=el.querySelector('.inBelt').getBoundingClientRect();
+ let x0=belt.left+12,y0=(belt.top+belt.bottom)/2;
+ ride.style.left=x0+'px';ride.style.top=y0+'px';
+ await wait(30);
+ ride.style.left=mouth.x+'px';ride.style.top=mouth.y+'px';
+ await wait(580);
+ ride.style.opacity='0';el.classList.add('blink');beepMach();play('place');
+ await wait(420);
+ el.classList.remove('blink');ride.remove();
+ applyMachEffect(kind,p);
+ // output belt up to platform
+ const out=el.querySelector('.outBelt');const plat=el.querySelector('.machPlat');
+ el.classList.add('hasPlat');el.classList.add('delivering');
+ await wait(40);
+ const ob=out.getBoundingClientRect();const pr=plat.getBoundingClientRect();
+ const ride2=document.createElement('div');ride2.className='ride';ride2.innerHTML=g.svg;const sv2=ride2.firstChild;if(sv2){sv2.setAttribute('width',56);sv2.setAttribute('height',56);sv2.style.transform=`rotate(${p.angle}deg)`;}
+ document.body.appendChild(ride2);
+ ride2.style.left=(ob.left+ob.width/2)+'px';ride2.style.top=(ob.bottom-10)+'px';
+ await wait(30);
+ ride2.style.transition='left .9s linear, top .9s linear';
+ ride2.style.left=(pr.left+pr.width/2)+'px';ride2.style.top=(pr.top+pr.height/2)+'px';
+ await wait(920);
+ ride2.remove();
+ plat.innerHTML=`<div class="platPiece">${shapeSVG(p.f,trayScale(p.f)*.55).svg}</div>`;
+ const ps=plat.querySelector('svg');if(ps){ps.setAttribute('width',54);ps.setAttribute('height',54);ps.style.transform=`rotate(${p.angle}deg)`;}
+ el._platP=p;p.onPlat=kind;el.classList.remove('busy','delivering','near','over');
+ say('Ready on the '+el.querySelector('.machName').textContent+' platform',1600);
+ renderTray();syncDrawers();return true}
 function enableFinder(p){if(p.finderLost)return;p.finder={on:true,calibrated:false,pct0:20+Math.random()*20,dZero:0,tgt:p.f.c.slice(),pct:null};updFinderBadge(p)}
 function applyFinder(p,ll){enableFinder(p);if(ll)calibrateFinder(p.finder,ll);return p.finder}
 function ensureProvFinder(pf){const k=provKey(pf);if(provFind[k]===null)return;if(!provFind[k])provFind[k]={on:true,calibrated:false,pct0:20+Math.random()*20,dZero:0,tgt:pf.c.slice(),pct:null,builtIn:true}}
@@ -428,12 +518,12 @@ function smAsk(title,opts,back){sm.innerHTML=`<div class="smc"><h2>${title}</h2>
 function smChoose(k){if(k==='global')return startGame('countries','all');
  if(k==='cont')return smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('countries',v)]));
  smAsk('Provinces: Global or Continent?',[['g','🌍 Global (30 big countries)',()=>startGame('prov','starter')],['c','Continent',()=>smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('prov',v)]),()=>smChoose('prov'))]]);}
-async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;machWrap.hidden=false;
+async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(0);for(const el of machWrap.querySelectorAll('.mach')){el._platP=null;el.classList.remove('hasPlat','busy','blink','near','over');const pl=el.querySelector('.machPlat');if(pl)pl.innerHTML='';}while(freeCoins.length){const c=freeCoins.pop();c.el.remove();}
  say(mode==='prov'?'Provinces: place a country, then fill in its provinces':'New game: '+$('set').selectedOptions[0].textContent,2400);}
-function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;machWrap.hidden=true;}
+function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;machWrap.hidden=true;if(pouchWrap)pouchWrap.hidden=true;}
 // ---------- pause menu + save / load (localStorage) ----------
 const SAVE_KEY='worldJigsaw.save.v1';
-function snapshot(){return {v:3,t:Date.now(),mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
+function snapshot(){return {v:4,t:Date.now(),coins,mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
  quat:G3.quat(),cam:G3.cam(),drawers:{L:DR.L.open,R:DR.R.open},placed:[...placed],anc:anc?{n:anc.p.f.name,step:anc.step}:null,
  pieces:pieces.map(p=>{const o={n:p.f.name,angle:p.angle,hint:p.hint};if(p.finder)o.finder=JSON.parse(JSON.stringify(p.finder));if(p.finderLost)o.finderLost=true;if(placed.has(p.f.name))o.st='placed';else if(p.parked){o.st='parked';o.lon=p.lon;o.lat=p.lat;o.s=p.s;}
   else if(p.body){o.st=p.dloc;o.x=p.body.x;o.y=p.body.y;o.sec=p.body.sec;}else o.st='L';return o;})};}
@@ -442,7 +532,7 @@ function readSave(){try{return JSON.parse(localStorage.getItem(SAVE_KEY)||'null'
 function cancelHeld(){if(carrying){dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return true}
  if(provCancel())return true;
  if(drag){const d=drag;d.el.onpointermove=d.el.onpointerup=d.el.onpointercancel=null;drag=null;ghost.remove();d.el.style.opacity='';return true}return false}
-async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=true;machWrap.hidden=false;const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
+async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(S.coins|0);const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
  const o=S.opts||{};$('easy').checked=!!o.easy;$('lbl').checked=o.lbl!==false;G3.labels($('lbl').checked);$('bg').value=o.bg||'0';G3.setBg(+$('bg').value);muted=!!o.muted;$('mute').textContent=muted?'🔇':'🔊';
  $('set').value=S.set;setPrev=S.set;buildSet();
  const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;p.finder=q.finder?JSON.parse(JSON.stringify(q.finder)):null;p.finderLost=!!q.finderLost;return p}).filter(Boolean);
@@ -477,7 +567,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();
