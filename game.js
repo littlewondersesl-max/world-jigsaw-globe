@@ -158,15 +158,16 @@ function neighbourHint(p,ll){const f=p.f,tol=Math.max(0.09,f.rad*0.9);return (d3
 function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();}
 function progress(){updScreen();$('progress').textContent=`${placed.size} / ${pieces.length}`;}
 // flag + tube
-function celebrate(n){const fl=FLAGS[n];const pop=$('flagPop');if(!fl){showCard(n);return;}$('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
- const cs=cols(n);let i=0;setTimeout(function next(){if(i>=cs.length){pop.hidden=true;showCard(n);return;}flyStripe(cs[i++]);setTimeout(next,450);},700);}
+let celebGen=0;function dismissCard(){celebGen++;const c=$('card');if(c)c.hidden=true;const pop=$('flagPop');if(pop)pop.hidden=true;}
+function celebrate(n){const gen=++celebGen;const fl=FLAGS[n];const pop=$('flagPop');if(!fl){if(gen===celebGen)showCard(n);return;}$('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
+ const cs=cols(n);let i=0;setTimeout(function next(){if(gen!==celebGen)return;if(i>=cs.length){pop.hidden=true;showCard(n);return;}flyStripe(cs[i++]);setTimeout(next,450);},700);}
 function flyStripe(c){const img=$('flagImg').getBoundingClientRect(),tube=$('tube').getBoundingClientRect(),fill=$('tubeFill').getBoundingClientRect();
  const h=Math.max(2,tube.height/stripeTotal);const d=document.createElement('div');d.className='fly';d.style.background=c;d.style.left=img.left+'px';d.style.top=(img.top+img.height/2)+'px';d.style.width=img.width+'px';document.body.appendChild(d);
  requestAnimationFrame(()=>requestAnimationFrame(()=>{d.style.left=(tube.left+3)+'px';d.style.width=(tube.width-6)+'px';d.style.top=(fill.top-h)+'px';d.style.height=h+'px';}));
  setTimeout(()=>{d.remove();const s=document.createElement('div');s.className='stripe';s.style.background=c;s.style.height=(100/stripeTotal)+'%';$('tubeFill').appendChild(s);},560);}
 function showCard(n){const f=FACTS[n];$('cName').textContent=n.replace('Dem. Rep.','Democratic Republic of the').replace('Is.','Islands').replace('Rep.','Republic')+' 🎉';
  $('cFacts').innerHTML=[`🌍 Continent: ${f[0]}`,`🏛️ Capital: ${f[1]}`,`⭐ Famous for: ${f[2]}`,`🐾 Animal: ${f[3]}`,`🍽️ Food: ${f[4]}`].map(t=>`<li>${t}</li>`).join('');$('card').hidden=false;if(!carrying)$('cOk').focus({preventScroll:true});}
-$('cOk').onclick=()=>{$('card').hidden=true;if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length)){play('win');say('🎉 You finished the puzzle! 🎉',5000);}};
+$('cOk').onclick=()=>{dismissCard();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length)){play('win');say('🎉 You finished the puzzle! 🎉',5000);}};
 // hints
 function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used: ${p.hint}/3`:'Tap the stack to draw a piece.';
  ['h1','h2','h3'].forEach((h,i)=>$(h).disabled=!p||p.hint<i);if(!p)$('hintText').textContent='';}
@@ -399,7 +400,10 @@ const spaceLayer=document.createElement('div');spaceLayer.id='spaceLayer';docume
 const ORB_MIN=1.15,ORB_MAX=2.55,THROW_SPD=780,HOLD_MS=480;
 function globeXY(){const r=G3.dom.getBoundingClientRect();return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2,R:Math.max(G3.screenRadius(),80)};}
 function isUiBlocked(x,y){try{const el=document.elementFromPoint(x,y);if(!el)return false;
-  return !!(el.closest&&el.closest('#machines,#hints,#stack,#zoom,#menuW,#topbar,header,#pouchWrap,#provBox,#card,#credP,#startM,#pause,.drawer,.dh,#scr'));}catch(e){return false;}}
+  if(el.closest&&(el.closest('.spPiece')||el.closest('#ghost')||el.closest('.ride')||el.closest('.coinFly')))return false;
+  // shut drawer: only the thin handle is interactive; treat as UI, but empty stage beyond it is free
+  if(el.closest&&el.closest('.dh'))return true;
+  return !!(el.closest&&el.closest('#machines,#hints,#stack,#zoom,#menuW,#topbar,header,#pouchWrap,#provBox,#card,#credP,#startM,#pause,.drawer:not(.shut),#scr'));}catch(e){return false;}}
 function remSpace(p){if(!p||!p.space)return;const s=p.space;if(s.el)s.el.remove();p.space=null;kickSpace();}
 function paintSpace(p){const s=p.space;if(!s||!s.el)return;s.el.style.transform=`translate3d(${s.x}px,${s.y}px,0) rotate(${p.angle}deg)`;s.el.classList.toggle('orbit',s.mode==='orbit');}
 function addSpace(p,x,y,vx,vy,mode){if(p.parked)unpark(p);if(p.body)remBody(p);remSpace(p);p.onPlat=null;p.onBelt=null;
@@ -416,7 +420,8 @@ function addSpace(p,x,y,vx,vy,mode){if(p.parked)unpark(p);if(p.body)remBody(p);r
     el.onpointermove=ev=>{if(Math.hypot(ev.clientX-x0,ev.clientY-y0)>8){moved=true;clearTimeout(hold);
       el.onpointermove=el.onpointerup=el.onpointercancel=null;remSpace(p);carry(p,ev,el);}};
     el.onpointerup=el.onpointercancel=ev=>{clearTimeout(hold);el.onpointermove=el.onpointerup=el.onpointercancel=null;
-      if(!moved){remSpace(p);carry(p,ev,el);}};
+      // Hold-to-orbit: leave the piece orbiting. A quick tap (no hold) picks it up.
+      if(!moved){if(p.space&&p.space.mode==='orbit')return;remSpace(p);carry(p,ev,el);}};
   });
   kickSpace();return s;}
 function enterOrbit(p){const s=p.space;if(!s)return;const gxy=globeXY();const dx=s.x-gxy.x,dy=s.y-gxy.y;let r=Math.hypot(dx,dy)||gxy.R*1.5;
@@ -630,7 +635,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,addSpace,remSpace,enterOrbit,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,setCoins,addCoins,addSpace,remSpace,enterOrbit,isUiBlocked,dismissCard,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();
