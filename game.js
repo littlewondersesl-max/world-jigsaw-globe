@@ -422,18 +422,21 @@ function updMachCosts(){for(const el of machWrap.querySelectorAll('.mach')){cons
 function beepMach(){try{const ctx=dac()||DAC;if(!ctx)return;const o=ctx.createOscillator(),g=ctx.createGain();o.type='square';o.frequency.value=880;g.gain.value=muted?0:.05;o.connect(g);g.connect(ctx.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.12);o.stop(ctx.currentTime+.14);setTimeout(()=>{const o2=ctx.createOscillator(),g2=ctx.createGain();o2.type='square';o2.frequency.value=1320;g2.gain.value=muted?0:.04;o2.connect(g2);g2.connect(ctx.destination);o2.start();g2.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+.1);o2.stop(ctx.currentTime+.12);},90);}catch(e){}}
 // Stylised canopy height in screen px (city trees ~0.005 world ≈ R/300; floor so hover stays readable at globe zoom).
 function coinTreePx(){const R=(window.G3&&G3.screenRadius)?G3.screenRadius():240;return Math.max(10,Math.min(16,R*0.042));}
+// Hi-res per-angle coin textures (≥512px); linear scale via CSS image-rendering:auto
+const COIN_FRAMES=Array.from({length:8},(_,i)=>'img/coin-f'+i+'.png?v=coins3');
+COIN_FRAMES.forEach(u=>{const im=new Image();im.src=u;});
 function burstCoinsAt(x,y,n){n=n||5;const zoom=Math.max(.55,Math.min(1.15,(window.G3&&G3.screenRadius?G3.screenRadius():220)/280));
  const tree=coinTreePx(),peakLift=tree*2; // hover peak ≈ twice treetops above the country surface
  for(let i=0;i<n;i++){const el=document.createElement('div');el.className='coinFly';const sz=Math.round(16+10*zoom);el.style.width=sz+'px';el.style.height=sz+'px';el.style.margin=(-sz/2)+'px 0 0 '+(-sz/2)+'px';
-  el.style.backgroundSize=(sz*8)+'px '+sz+'px';el.style.backgroundPosition='0 0';
+  el.style.backgroundSize='100% 100%';el.style.backgroundPosition='0 0';
   // Burst is still snappy, but apex is the low peak (no sky-high arc).
   const lift=peakLift*(.88+Math.random()*.24),peak=y-lift;
   const ang=-Math.PI/2+(Math.random()-.5)*.55; // mostly straight up
   const spd=Math.sqrt(2*1500*lift)*(0.92+Math.random()*0.2); // physics apex ≈ peak
-  const c={el,x,y,vx:Math.cos(ang)*spd*(.35+Math.random()*.35),vy:Math.sin(ang)*spd,phase:'up',peak,frozen:false,ang:Math.random()*360,spin:220+Math.random()*160,born:performance.now(),frame:0,sz};
-  el.style.left=x+'px';el.style.top=y+'px';document.body.appendChild(el);freeCoins.push(c);}
+  const c={el,x,y,vx:Math.cos(ang)*spd*(.35+Math.random()*.35),vy:Math.sin(ang)*spd,phase:'up',peak,frozen:false,ang:Math.random()*360,spin:220+Math.random()*160,born:performance.now(),frame:-1,sz};
+  coinSetFrame(c);el.style.left=x+'px';el.style.top=y+'px';document.body.appendChild(el);freeCoins.push(c);}
  if(!burstCoinsAt._raf)burstCoinsAt._raf=requestAnimationFrame(tickCoins);}
-function coinSetFrame(c){const n=8;const fi=((Math.floor(c.ang/45)%n)+n)%n;if(fi===c.frame)return;c.frame=fi;c.el.style.backgroundPosition=(-fi*c.sz)+'px 0';}
+function coinSetFrame(c){const n=8;const fi=((Math.floor(c.ang/45)%n)+n)%n;if(fi===c.frame)return;c.frame=fi;c.el.style.backgroundImage='url('+COIN_FRAMES[fi]+')';}
 function tickCoins(t){burstCoinsAt._raf=0;const dt=Math.min(.032,(tickCoins._t? (t-tickCoins._t):16)/1000);tickCoins._t=t;const MAG=120;
  for(let i=freeCoins.length-1;i>=0;i--){const c=freeCoins[i];
   if(c.phase==='up'){c.vy+=1500*dt;c.x+=c.vx*dt;c.y+=c.vy*dt;c.vx*=.985;
