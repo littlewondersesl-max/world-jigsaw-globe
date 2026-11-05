@@ -286,7 +286,7 @@ let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body
    drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY);};
  // Escape: drop the carried piece back into the All-pieces drawer
  const esc=ev=>{if(ev.key!=='Escape'||carrying!==p)return;removeEventListener('keydown',esc);removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);
-  drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';if(!p.parked&&!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();};
+  drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';if(!p.body&&!p.parked&&!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();};
  addEventListener('keydown',esc);
  addEventListener('pointermove',mv,true);addEventListener('pointerdown',dn,true);addEventListener('pointerup',up,true);}
 // stack bottom-left: a random loose piece from the left drawer
