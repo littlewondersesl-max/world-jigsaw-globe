@@ -36,7 +36,7 @@ function stinger(n){if(muted)return;try{AC=AC||new (window.AudioContext||window.
 function draw(){}
 function setZoom(z){G3.zoomBy(z/zoom);zoom=1;if(drag)updateGhostShape();}
 $('zin').onclick=()=>setZoom(1.4);$('zout').onclick=()=>setZoom(1/1.4);
-window.addEventListener('wheel',()=>{if(drag)updateGhostShape();},{passive:true});
+
 function spinTo(c,z){G3.spinTo(c,z);}
 // ---------- pieces ----------
 // ---- piece faces: real land colours sampled from the same world texture the globe uses (Natural Earth I + our South America look-3) ----
@@ -58,7 +58,7 @@ function shapeSVG(f,scale,cls){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.
 <rect x="${-r}" y="${-r}" width="${2*r}" height="${2*r}" fill="url(#wood)" opacity=".22" style="mix-blend-mode:multiply"/></g>
 <path d="${d}" fill="none" stroke="url(#wood)" stroke-width="${rim*1.2}" stroke-opacity=".7" clip-path="url(#${id})"/><path d="${d}" fill="none" stroke="#2a170a" stroke-opacity=".45" stroke-width="${rim*.3}"/></svg>`,r};}
 function trayScale(f){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(1).translate([0,0]),b=d3.geoPath(pr).bounds(f);const m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1]);return 80/m;}
-function buildSet(){const v=$('set').value;let names=feats.map(f=>f.name);
+function buildSet(){if(carrying)dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));const v=$('set').value;let names=feats.map(f=>f.name);
  if(v=='starter')names=STARTER;else if(v=='Americas')names=names.filter(n=>/America/.test(FACTS[n][0]));
  else if(v=='Oceania')names=names.filter(n=>/Oceania|Antarctica/.test(FACTS[n][0]));else if(v!='all')names=names.filter(n=>FACTS[n][0].includes(v));
  placed.clear();G3.clear();for(const q of [...parked])unpark(q);anc=null;aui.innerHTML='';aui._h=null;hdl.style.display='none';G3.outline(null);pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
@@ -79,7 +79,7 @@ function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.p
  ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);ghost.style.display='none';updateGhostShape();
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
  el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved&&ev.type==='pointerup')window.__release(d.p,ev.clientX,ev.clientY);};}
-window.addEventListener('wheel',e=>{if(drag){e.preventDefault();setAngle(drag.p,drag.p.angle+(e.deltaY>0?15:-15));}},{passive:false,capture:true});
+window.addEventListener('wheel',e=>{if(drag){e.preventDefault();e.stopPropagation();setAngle(drag.p,drag.p.angle+(e.deltaY>0?15:-15));updateGhostShape();}},{passive:false,capture:true});
 window.addEventListener('keydown',e=>{if(!sel)return;if(e.key=='q'||e.key=='Q')setAngle(sel,sel.angle-15);if(e.key=='e'||e.key=='E')setAngle(sel,sel.angle+15);});
 $('rl').onclick=()=>sel&&setAngle(sel,sel.angle-15);$('rr').onclick=()=>sel&&setAngle(sel,sel.angle+15);
 function say(t,ms){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(say.t);say.t=setTimeout(()=>m.style.display='none',ms||1800);}
