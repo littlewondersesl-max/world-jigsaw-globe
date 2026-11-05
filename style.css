@@ -105,3 +105,19 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #provBox .pv span{font-size:10px;text-align:center;line-height:1.1;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #provBox .pc,.pvg .pc{filter:grayscale(1) sepia(.35) hue-rotate(170deg) saturate(1.6) brightness(.95)}
 #provBox .ovFly,.ovFly{position:fixed;z-index:20;pointer-events:none;padding:4px 8px;border-radius:8px;background:#4a6a88ee;color:#e8eef3;font:12px system-ui,sans-serif;transition:transform .5s ease,opacity .5s ease;white-space:nowrap;box-shadow:0 4px 14px #0008}
+
+/* Machines: Sizeinator, Orientationator, Finderator */
+#machines{position:fixed;left:100px;bottom:14px;z-index:9;display:flex;gap:8px;align-items:flex-end}
+#machines[hidden]{display:none}
+#machines .mach{width:92px;min-height:78px;padding:6px 4px 8px;border-radius:10px;background:#2a1a0f url(wood.jpg) center/140px;box-shadow:inset 0 0 0 3px #1a0d05,0 6px 14px #000a;color:#f3e6d3;font:11px/1.15 system-ui,sans-serif;text-align:center;cursor:default;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;user-select:none}
+#machines .mach b{font-size:22px;line-height:1;filter:drop-shadow(0 1px 1px #000a)}
+#machines .mach[data-id=find]{background-image:url(wood_teal.jpg)}
+#machines .mach.over{outline:2px solid #f6d27a;outline-offset:2px}
+
+/* Hot-and-cold Finderator badge */
+.fbadge{position:absolute;right:-6px;top:-10px;z-index:5;min-width:36px;padding:2px 6px;border-radius:10px;font:700 12px/1.2 system-ui,sans-serif;text-align:center;color:#fff;background:#2a6fbf;border:1px solid #cfe6ff;box-shadow:0 2px 8px #000a;pointer-events:none}
+.fbadge[data-hot="2"]{background:#c48a1a}
+.fbadge[data-hot="1"]{background:#c23b2e}
+#ghost .fbadge,.pvg .fbadge{right:4px;top:4px}
+#provBox .pv.ovseas{position:relative}
+#provBox .fmeter{font-style:normal;font-size:11px;margin-top:1px;opacity:.9}

@@ -74,7 +74,7 @@ function select(p){sel=p;document.querySelectorAll('.piece').forEach(x=>x.classL
 let drag=null,ghost=null;
 function updateGhostShape(){if(!drag)return;const sr=Math.max(G3.screenRadius(),1),gs=drag.p.parked?drag.p.s:placed.size?1:boxScale(drag.p.f);const g=shapeSVG(drag.p.f,sr*gs);ghost.innerHTML=g.svg;let sv=ghost.firstChild,sz=2*g.r;
  if(sz<34){sv.setAttribute('width',34);sv.setAttribute('height',34);sz=34;}drag.half=sz/2;sv.style.transform=`rotate(${drag.p.angle}deg)`;moveGhost(drag.x,drag.y);}
-function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left='0px';ghost.style.top='0px';ghost.style.transform=`translate3d(${x-drag.half}px,${y-drag.half}px,0)`;}
+function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left='0px';ghost.style.top='0px';ghost.style.transform=`translate3d(${x-drag.half}px,${y-drag.half}px,0)`;if(drag&&drag.p)tickFinderAt(drag.p,x,y);hiliteMach(x,y);}
 function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.pointerId);drag={p,el,x:e.clientX,y:e.clientY,moved:false};
  ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);ghost.style.display='none';updateGhostShape();
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
@@ -286,14 +286,15 @@ function step(){raf=0;let busy=false;const W=innerWidth;
 function drawerAt(x,y){const W=innerWidth;if(DR.L.open>0&&x<DR.L.open)return {side:'L',x:x+W-DR.L.open,y};if(DR.R.open>0&&x>W-DR.R.open)return {side:'R',x:x-(W-DR.R.open),y};return null;}
 function secAt(lx,ly){const r=secRects().find(r=>lx>=r.x&&lx<r.x+r.w&&ly>=r.y&&ly<r.y+r.h);return r?r.c:null;}
 // release a held piece: into a drawer, else onto the globe (anything not placed/parked goes back to the left drawer)
-function release(p,x,y){const d=drawerAt(x,y);if(d){if(p.parked)unpark(p);addBody(d.side,p,d.x,d.y,true,d.side==='R'?secAt(d.x,d.y):null);renderTray();return;}
+function release(p,x,y){hiliteMach(-1,-1);const mk=machineAt(x,y);if(mk){runMachine(mk,p);if(p.parked){renderTray();return}if(p.body){renderTray();return}if(!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();return;}
+ const d=drawerAt(x,y);if(d){if(p.parked)unpark(p);addBody(d.side,p,d.x,d.y,true,d.side==='R'?secAt(d.x,d.y):null);renderTray();return;}
  drop(p,x,y);if(!placed.has(p.f.name)&&!p.parked&&!p.body){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}syncDrawers();}
 window.__release=release;
 // carry: piece follows the pointer. A drag releases on lift; a click/tap keeps it on the cursor until the next click/tap.
 let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';
  drag={p,el:src,x:e.clientX,y:e.clientY,moved:true};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
  const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;
- const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{if(ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,header')){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}// double-click: keep holding
+ const mv=ev=>{if(drag)moveGhost(ev.clientX,ev.clientY)},dn=ev=>{if(ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,#machines,header')){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}// double-click: keep holding
   downs++;ev.stopPropagation();ev.preventDefault();},
   up=ev=>{if(hd){hd=0;return;}const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
    removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);removeEventListener('keydown',esc);
@@ -313,10 +314,10 @@ const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')sync
 addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
 syncDrawers();kick();
 // ---------- provinces: a box of named, fogged province pieces pops out for each placed country ----------
-let provPlaced=new Set(),provOpen=[],overseasAnim={};// provOpen: countries whose provinces are still being placed (in order)
+let provPlaced=new Set(),provOpen=[],provFind={};// provOpen: countries whose provinces are still being placed (in order)
 const pbox=document.createElement('div');pbox.id='provBox';pbox.hidden=true;document.body.appendChild(pbox);
 function provPending(){return provOpen[0]||null}
-function provReset(){provPlaced=new Set();provOpen=[];for(const k of Object.keys(overseasAnim||{}))delete overseasAnim[k];pbox.hidden=true;pbox.innerHTML='';}
+function provReset(){provPlaced=new Set();provOpen=[];provFind={};pbox.hidden=true;pbox.innerHTML='';}
 function provKey(pf){return pf.country+'|'+pf.name}
 /* Far-flung overseas: not in the densest geographic cluster (join ≤2800 km). */
 function markOverseas(feats){if(!feats||feats.length<2){for(const f of feats||[])f.overseas=false;return}
@@ -328,46 +329,73 @@ function markOverseas(feats){if(!feats||feats.length<2){for(const f of feats||[]
 function provAll(n){return GEOP.PV[n]||[]}
 function provMainland(n){return provAll(n).filter(pf=>!pf.overseas)}
 function provOverseas(n){return provAll(n).filter(pf=>pf.overseas)}
-function provLeft(n){return provMainland(n).filter(pf=>!provPlaced.has(provKey(pf)))}
-function openProv(n,quiet){if(!provLeft(n).length){ensureOverseas(n,true);return}if(!provOpen.includes(n))provOpen.push(n);renderProv(!quiet);}
-function renderProv(pop){const n=provPending();if(!n){pbox.hidden=true;pbox.innerHTML='';return}const L=provLeft(n),tot=provMainland(n).length;
+function provLeft(n){return provAll(n).filter(pf=>!provPlaced.has(provKey(pf)))}
+function openProv(n,quiet){if(!provLeft(n).length){return}if(!provOpen.includes(n))provOpen.push(n);renderProv(!quiet);}
+function renderProv(pop){const n=provPending();if(!n){pbox.hidden=true;pbox.innerHTML='';return}const L=provLeft(n),tot=provAll(n).length;
  pbox.innerHTML=`<div class="pbh"><b>Provinces of ${n}</b> <span>${tot-L.length} / ${tot}</span></div><div class="pbl"></div>`;const box=pbox.lastChild;
- for(const pf of L){const d=document.createElement('div');d.className='pv';d.dataset.n=pf.name;const g=shapeSVG(pf,Math.min(60/Math.max(pf.rad,.004)/2.2,2400));d.innerHTML=g.svg+`<span>${pf.name}</span>`;
+ for(const pf of L){const d=document.createElement('div');d.className='pv'+(pf.overseas?' ovseas':'');d.dataset.n=pf.name;
+  if(pf.overseas){ensureProvFinder(pf);d.dataset.find='1'}
+  const g=shapeSVG(pf,Math.min(60/Math.max(pf.rad,.004)/2.2,2400));d.innerHTML=g.svg+`<span>${pf.name}</span>`+(pf.overseas?'<i class="fmeter" title="Finderator">🧭</i>':'');
   const sv=d.firstChild;sv.setAttribute('width',54);sv.setAttribute('height',54);d.addEventListener('pointerdown',e=>provDrag(e,pf,d));box.appendChild(d);}
- pbox.hidden=false;if(pop)pbox.animate([{transform:'translate(-50%,60px) scale(.6)',opacity:0},{transform:'translate(-50%,0) scale(1)',opacity:1}],{duration:380,easing:'cubic-bezier(.2,1.4,.4,1)'});}
+ pbox.hidden=false;if(pop)pbox.animate([{transform:'translate(-50%,60px) scale(.6)',opacity:0},{transform:'translate(-50%,0) scale(1)',opacity:1}],{duration:380,easing:'cubic-bezier(.2,.8,.2,1)'});}
+function placeProv(pf,quiet){if(provPlaced.has(provKey(pf)))return;provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[pf.country][0]);clearProvFinder(pf);if(quiet)return;play('place');
+ const n=pf.country;if(!provLeft(n).length){provOpen=provOpen.filter(q=>q!==n);say(`✅ ${n} complete! Connect the next country.`,2600);renderProv(true);joinParked();
+  if(placed.size==pieces.length&&!provOpen.length){play('win');setTimeout(()=>say('🎉 You finished the puzzle! 🎉',5000),2700);}}else renderProv(false);}
+
 let pdrag=null;
 function provDrag(e,pf,el){if(carrying||drag)return;e.preventDefault();e.stopPropagation();el.setPointerCapture(e.pointerId);const gh=document.createElement('div');gh.id='ghost';gh.className='pvg';document.body.appendChild(gh);
  const g=shapeSVG(pf,Math.max(G3.screenRadius(),1));gh.innerHTML=g.svg;let sz=2*g.r;if(sz<28){gh.firstChild.setAttribute('width',28);gh.firstChild.setAttribute('height',28);sz=28}
  const mv=(x,y)=>gh.style.transform=`translate3d(${x-sz/2}px,${y-sz/2}px,0)`;mv(e.clientX,e.clientY);pdrag={pf,el,gh};el.style.opacity=.3;
- el.onpointermove=ev=>mv(ev.clientX,ev.clientY);
+ el.onpointermove=ev=>{mv(ev.clientX,ev.clientY);tickProvFinder(pf,ev.clientX,ev.clientY,gh)};
  el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;gh.remove();el.style.opacity='';pdrag=null;if(ev.type==='pointerup')provDrop(pf,ev.clientX,ev.clientY,el);};}
 function provCancel(){if(!pdrag)return false;const {el,gh}=pdrag;el.onpointermove=el.onpointerup=el.onpointercancel=null;gh.remove();el.style.opacity='';pdrag=null;return true}
 function provFits(pf,x,y){const ll=G3.pick(x,y);if(!ll)return false;if(d3.geoContains(pf,ll))return true;if(d3.geoDistance(ll,pf.c)<Math.max(.02,pf.rad*.6))return true;
  if(G3.facing(pf.c[0],pf.c[1])){const [px,py]=G3.project(pf.c[0],pf.c[1]);if(Math.hypot(px-x,py-y)<22)return true}return false}
 function provDrop(pf,x,y,el){if(provFits(pf,x,y)){placeProv(pf);return}play('miss');el.animate([{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'none'}],{duration:280});}
-function placeProv(pf,quiet){if(provPlaced.has(provKey(pf)))return;provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[pf.country][0]);if(quiet)return;play('place');afterProvPlace(pf.country)}
-function afterProvPlace(n){const main=provMainland(n),left=provLeft(n),overLeft=provOverseas(n).filter(pf=>!provPlaced.has(provKey(pf)));
- const done=main.length-left.length;
- if(overLeft.length&&done*2>=main.length&&!overseasAnim[n]){startOverseasAnim(n,()=>afterProvPlace(n));renderProv(false);return}
- if(overseasAnim[n]){renderProv(false);return}
- if(left.length){renderProv(false);return}
- completeProvCountry(n)}
-function completeProvCountry(n){ensureOverseas(n,true);provOpen=provOpen.filter(q=>q!==n);say(`✅ ${n} complete! Connect the next country.`,2600);renderProv(true);joinParked();
- if(placed.size==pieces.length&&!provOpen.length){play('win');setTimeout(()=>say('🎉 You finished the puzzle! 🎉',5000),2700)}}
-function ensureOverseas(n,silent){for(const pf of provOverseas(n)){if(!provPlaced.has(provKey(pf))){provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[n][0]);if(!silent)play('place')}}}
-function startOverseasAnim(n,done){const over=provOverseas(n).filter(pf=>!provPlaced.has(provKey(pf)));if(!over.length){done&&done();return}
- overseasAnim[n]=true;say(`Overseas parts of ${n} are settling in…`,2200);
- let i=0;const step=()=>{if(i>=over.length){delete overseasAnim[n];done&&done();return}
-  const pf=over[i++];animateOverseasIn(pf,()=>{if(!provPlaced.has(provKey(pf))){provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[n][0])}
-   if(i===1)play('place');setTimeout(step,260)})};step()}
-function animateOverseasIn(pf,done){const g=document.createElement('div');g.className='ovFly';g.textContent=pf.name;
- const box=pbox.getBoundingClientRect();const x0=box.left+box.width/2,y0=box.top||innerHeight-80;
- g.style.left=x0+'px';g.style.top=y0+'px';document.body.appendChild(g);
- const fly=()=>{const on=G3.facing(pf.c[0],pf.c[1]);const [x,y]=on?G3.project(pf.c[0],pf.c[1]):[innerWidth/2,innerHeight*0.45];
-  g.style.transform=`translate(${x-x0}px,${y-y0}px) scale(.35)`;g.style.opacity='0';
-  setTimeout(()=>{g.remove();done()},520)};
- if(!G3.facing(pf.c[0],pf.c[1])){spinTo(pf.c,1.5);setTimeout(fly,950)}else setTimeout(fly,40)}
+
+// ---------- Finderator meter + the three machines ----------
+const MACH=[{id:'size',title:'Sizeinator',blurb:'Puts a piece at true globe size',icon:'⤢'},
+ {id:'orient',title:'Orientationator',blurb:'Turns a piece north-up',icon:'⟲'},
+ {id:'find',title:'Finderator',blurb:'Hot & cold % toward the right spot',icon:'📡'}];
+const machWrap=document.createElement('div');machWrap.id='machines';
+machWrap.innerHTML=MACH.map(m=>`<div class="mach" data-id="${m.id}" title="${m.blurb}"><b>${m.icon}</b><span>${m.title}</span></div>`).join('');
+document.body.appendChild(machWrap);machWrap.hidden=true;
+function machineAt(x,y){for(const el of machWrap.querySelectorAll('.mach')){const r=el.getBoundingClientRect();
+ if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return el.dataset.id}return null}
+function hiliteMach(x,y){const id=machineAt(x,y);for(const el of machWrap.querySelectorAll('.mach'))el.classList.toggle('over',el.dataset.id===id)}
+function runMachine(kind,p){if(!p||placed.has(p.f.name))return false;
+ if(kind==='size'){p.s=1;say('Sizeinator: true size ✓',1600);play('place');return true}
+ if(kind==='orient'){setAngle(p,0);say('Orientationator: north-up ✓',1600);play('place');return true}
+ if(kind==='find'){if(p.finderLost){say('Finderator already spent on this piece',1800);return false}
+  enableFinder(p);say('Finderator: hot & cold meter on — drag toward the spot',2600);play('place');return true}
+ return false}
+function enableFinder(p){if(p.finderLost)return;p.finder={on:true,calibrated:false,pct0:20+Math.random()*20,dZero:0,tgt:p.f.c.slice(),pct:null};updFinderBadge(p)}
+function applyFinder(p,ll){enableFinder(p);if(ll)calibrateFinder(p.finder,ll);return p.finder}
+function ensureProvFinder(pf){const k=provKey(pf);if(provFind[k]===null)return;if(!provFind[k])provFind[k]={on:true,calibrated:false,pct0:20+Math.random()*20,dZero:0,tgt:pf.c.slice(),pct:null,builtIn:true}}
+function clearProvFinder(pf){}
+function calibrateFinder(F,ll){if(!F||!F.on||F.calibrated||!ll)return;
+ const d=Math.max(d3.geoDistance(ll,F.tgt),1e-5);F.dZero=d/(1-F.pct0/100);F.calibrated=true;F.start=ll.slice();F.pct=F.pct0}
+function finderPctFrom(F,ll){if(!F||!F.on)return null;if(!F.calibrated){calibrateFinder(F,ll);if(!F.calibrated)return F.pct0}
+ const d=d3.geoDistance(ll,F.tgt);const pct=Math.max(0,Math.min(100,100*(1-d/F.dZero)));F.pct=pct;return pct}
+function finderPct(p,ll){return p&&p.finder?finderPctFrom(p.finder,ll):null}
+function loseFinder(p){if(!p||!p.finder)return;p.finder=null;p.finderLost=true;updFinderBadge(p);say('Finderator meter lost (0%)',2000);play('miss')}
+function loseProvFinder(pf){const k=provKey(pf);provFind[k]=null;say('Finderator meter lost (0%)',2000);play('miss')}
+function updFinderBadge(p){if(p&&p.ov){let b=p.ov.querySelector('.fbadge');if(p.finder&&p.finder.on){if(!b){b=document.createElement('div');b.className='fbadge';p.ov.appendChild(b)}
+  const v=p.finder.pct==null?Math.round(p.finder.pct0):Math.round(p.finder.pct);b.textContent=v+'%';b.dataset.hot=v>=70?'1':v>=40?'2':'3'}
+  else if(b)b.remove()}}
+function showGhostMeter(pct){if(!ghost)return;let m=ghost.querySelector('.fbadge');if(pct==null){if(m)m.remove();return}
+ if(!m){m=document.createElement('div');m.className='fbadge';ghost.appendChild(m)}
+ m.textContent=Math.round(pct)+'%';m.dataset.hot=pct>=70?'1':pct>=40?'2':'3'}
+function tickFinderAt(p,x,y){if(!p||!p.finder||!p.finder.on){showGhostMeter(null);return}
+ const ll=G3.pick(x,y);if(!ll){showGhostMeter(p.finder.calibrated?(p.finder.pct??p.finder.pct0):p.finder.pct0);return}
+ const pct=finderPctFrom(p.finder,ll);showGhostMeter(pct);updFinderBadge(p);if(pct<=0)loseFinder(p)}
+function tickProvFinder(pf,x,y,gh){ensureProvFinder(pf);const F=provFind[provKey(pf)];if(!F){const m=gh.querySelector('.fbadge');if(m)m.remove();return}
+ const ll=G3.pick(x,y);const pct=ll?finderPctFrom(F,ll):(F.calibrated?(F.pct??F.pct0):F.pct0);
+ let m=gh.querySelector('.fbadge');if(pct==null){if(m)m.remove();return}if(!m){m=document.createElement('div');m.className='fbadge';gh.appendChild(m)}
+ m.textContent=Math.round(pct)+'%';m.dataset.hot=pct>=70?'1':pct>=40?'2':'3';if(pct<=0){loseProvFinder(pf);m.remove()}}
+
 // ---------- start menu ----------
+
 const SM_OPTS=[{k:'global',t:'Global',i:'<svg class="tg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.5" fill="#2d6fa8" stroke="#cfe6ff" stroke-width="1.2"/><path d="M5 6c2 0 3 1 3 3s-2 2-2 4 1 3 1 3M12 3.5c-1 2 1 3 3 3.5s2 3 0 4-2 3-1 4" fill="none" stroke="#9bd17a" stroke-width="2" stroke-linecap="round"/></svg>'},{k:'cont',t:'Continents',i:''},{k:'prov',t:'Provinces',i:''}];
 const CONT_SETS=[['Africa','Africa'],['Asia','Asia'],['Europe','Europe'],['Americas','Americas'],['Oceania','Oceania + Antarctica']];
 let smI=0;const sm=document.createElement('div');sm.id='startM';sm.hidden=true;document.body.appendChild(sm);
@@ -384,31 +412,30 @@ function smAsk(title,opts,back){sm.innerHTML=`<div class="smc"><h2>${title}</h2>
 function smChoose(k){if(k==='global')return startGame('countries','all');
  if(k==='cont')return smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('countries',v)]));
  smAsk('Provinces: Global or Continent?',[['g','🌍 Global (30 big countries)',()=>startGame('prov','starter')],['c','Continent',()=>smAsk('Which continent?',CONT_SETS.map(([v,t])=>[v,t,()=>startGame('prov',v)]),()=>smChoose('prov'))]]);}
-async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;
+async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.disabled=true);if(mode==='prov')await loadProvGeo();setMode(mode);$('set').value=set;setPrev=set;buildSet();const v=SETVIEW[set];if(v)spinTo(v,1);sm.hidden=true;machWrap.hidden=false;
  say(mode==='prov'?'Provinces: place a country, then fill in its provinces':'New game: '+$('set').selectedOptions[0].textContent,2400);}
-function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;}
+function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;machWrap.hidden=true;}
 // ---------- pause menu + save / load (localStorage) ----------
 const SAVE_KEY='worldJigsaw.save.v1';
-function snapshot(){return {v:2,t:Date.now(),mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
+function snapshot(){return {v:3,t:Date.now(),mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
  quat:G3.quat(),cam:G3.cam(),drawers:{L:DR.L.open,R:DR.R.open},placed:[...placed],anc:anc?{n:anc.p.f.name,step:anc.step}:null,
- pieces:pieces.map(p=>{const o={n:p.f.name,angle:p.angle,hint:p.hint};if(placed.has(p.f.name))o.st='placed';else if(p.parked){o.st='parked';o.lon=p.lon;o.lat=p.lat;o.s=p.s;}
+ pieces:pieces.map(p=>{const o={n:p.f.name,angle:p.angle,hint:p.hint};if(p.finder)o.finder=JSON.parse(JSON.stringify(p.finder));if(p.finderLost)o.finderLost=true;if(placed.has(p.f.name))o.st='placed';else if(p.parked){o.st='parked';o.lon=p.lon;o.lat=p.lat;o.s=p.s;}
   else if(p.body){o.st=p.dloc;o.x=p.body.x;o.y=p.body.y;o.sec=p.body.sec;}else o.st='L';return o;})};}
 function saveGame(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(snapshot()));toast('Game saved');}catch(e){toast('Could not save: '+e.message);}updPause();}
 function readSave(){try{return JSON.parse(localStorage.getItem(SAVE_KEY)||'null');}catch(e){return null}}
 function cancelHeld(){if(carrying){dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));return true}
  if(provCancel())return true;
  if(drag){const d=drag;d.el.onpointermove=d.el.onpointerup=d.el.onpointercancel=null;drag=null;ghost.remove();d.el.style.opacity='';return true}return false}
-async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=true;const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
+async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=true;machWrap.hidden=false;const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
  const o=S.opts||{};$('easy').checked=!!o.easy;$('lbl').checked=o.lbl!==false;G3.labels($('lbl').checked);$('bg').value=o.bg||'0';G3.setBg(+$('bg').value);muted=!!o.muted;$('mute').textContent=muted?'🔇':'🔊';
  $('set').value=S.set;setPrev=S.set;buildSet();
- const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;return p}).filter(Boolean);
+ const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;p.finder=q.finder?JSON.parse(JSON.stringify(q.finder)):null;p.finderLost=!!q.finderLost;return p}).filter(Boolean);
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;
  G3.setQuat(S.quat);
  for(const n of S.placed){const p=byN[n];if(!p)continue;placed.add(n);if(MODE==='prov')G3.fog(p.f);else G3.placeNow(p.f,FACTS[n][0]);for(const c of cols(n)){const st=document.createElement('div');st.className='stripe';st.style.background=c;st.style.height=(100/stripeTotal)+'%';$('tubeFill').appendChild(st);}}
  if(MODE==='prov'){const K=new Set(S.provPlaced||[]);for(const n of S.placed)for(const pf of GEOP.PV[n]||[])if(K.has(provKey(pf)))placeProv(pf,true);
-  for(const n of (S.provOpen||[]))openProv(n,true);
-  for(const n of S.placed){const main=provMainland(n),done=main.filter(pf=>provPlaced.has(provKey(pf))).length;
-   if(done===main.length||done*2>=main.length)ensureOverseas(n,true);}}
+  provFind=Object.assign({},S.provFind||{});
+  for(const n of (S.provOpen||[]))openProv(n,true);}
  for(const q of S.pieces)if(q.st==='parked')park(byN[q.n],[q.lon,q.lat],q.s);
  if(S.anc){const p=byN[S.anc.n];if(p&&p.parked){anc={p,step:S.anc.step};p.ov.classList.add('anc');p.ov.style.cursor='default';p.ov.addEventListener('pointerdown',ancDown);if(anc.step==='lat')G3.outline(p.f);else if(anc.step==='blink')nextStep();}}
  for(const q of S.pieces)if(q.st==='L'||q.st==='R'){const p=byN[q.n];if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}
@@ -434,7 +461,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,afterProvPlace,ensureOverseas});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();
