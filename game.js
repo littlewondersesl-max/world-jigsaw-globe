@@ -142,7 +142,9 @@ let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const 
  if(aui._h!==h){aui._h=h;aui.innerHTML='<defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker></defs>'+h;}}
 function fits(p,ll){const f=p.f,easy=$('easy').checked,small=f.rad<0.12;let tol=Math.max(0.09,f.rad*0.9);if(easy&&small)tol=Math.max(tol,0.25);
  if(!(d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll)))return false;if(Math.abs(angOff(p.angle))>25&&!(easy&&small))return false;
- const nb=neigh[f.name]||[];return !nb.length||nb.some(n=>placed.has(n))||![...nb].some(n=>pieces.some(q=>q.f.name===n));}
+ const nb=neigh[f.name]||[];if(!nb.length||nb.some(n=>placed.has(n)))return true;
+ // must join a placed neighbour, unless this piece's whole land group in the set (e.g. UK+Ireland, Haiti+Dominican Rep.) has nothing placed yet
+ const inSet=new Set(pieces.map(q=>q.f.name)),seen=new Set([f.name]),Q=[f.name];while(Q.length){for(const n of neigh[Q.pop()]||[])if(inSet.has(n)&&!seen.has(n)){if(placed.has(n))return false;seen.add(n);Q.push(n);}}return true;}
 function joinParked(){let again=true;while(again){again=false;for(const q of [...parked]){if(anc&&anc.p===q)continue;if(fits(q,[q.lon,q.lat])){unpark(q);place(q,true);again=true;}}}}
 function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||x>r.right||y<r.top||y>r.bottom)?null:G3.pick(x,y);
  if(!ll){if(p.parked){unpark(p);renderTray();}return;}
