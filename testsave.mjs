@@ -1,5 +1,5 @@
 import {chromium} from '/workspace/four-corners-src/node_modules/playwright/index.mjs';
-const U='http://localhost:8944/';
+const U='http://localhost:8944/?play';
 const b=await chromium.launch({executablePath:'/home/box/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome',args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 const ctx=await b.newContext({viewport:{width:1280,height:800}});const p=await ctx.newPage();const errs=[],dlg=[];p.on('pageerror',e=>errs.push(String(e)));p.on('dialog',d=>{dlg.push(d.message());d.accept()});
 const ev=(f,a)=>p.evaluate(f,a),W=ms=>p.waitForTimeout(ms),M=p.mouse,R={};
