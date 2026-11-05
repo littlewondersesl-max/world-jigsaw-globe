@@ -171,7 +171,9 @@ $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=
  $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${f[5]}`;updHints();};
 $('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c,Math.max(1.4,Math.min(3,6.2/(1+19*p.f.rad))));G3.pulse(p.f,5000);$('hintText').innerHTML+='<br>✨ Look for the yellow glow!';updHints();};
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';};
-$('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl').onchange=e=>G3.labels(e.target.checked);
+const SETVIEW={Africa:[20,2],Asia:[90,30],Europe:[15,50],Americas:[-80,8],Oceania:[150,-25]};
+$('set').onchange=e=>{buildSet();const v=SETVIEW[e.target.value];if(v)spinTo(v,1);};// face the chosen region instead of leaving the old view
+$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl').onchange=e=>G3.labels(e.target.checked);
 // ---------- load ----------
 (window.G3?Promise.resolve():new Promise(r=>addEventListener('g3ready',r,{once:true}))).then(()=>fetch('data/countries-110m.json')).then(r=>r.json()).then(t=>{const geoms=t.objects.countries.geometries;
  const merge={"N. Cyprus":"Cyprus","Somaliland":"Somalia"};const groups={};geoms.forEach((g,i)=>{const n=merge[g.properties.name]||g.properties.name;(groups[n]=groups[n]||[]).push(i);});
