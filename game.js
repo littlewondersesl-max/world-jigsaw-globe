@@ -187,7 +187,7 @@ let MODE='countries',GEO110=null,GEOP=null;
 function loadProvGeo(){if(GEOP)return Promise.resolve(GEOP);return fetch('data/admin1.json').then(r=>r.json()).then(t=>{const G=t.objects.prov.geometries,by={};G.forEach(g=>(by[g.properties.g]=by[g.properties.g]||[]).push(g));
  const names=Object.keys(by).filter(n=>FACTS[n]);const fs=[],bn={},ng={},PV={};
  for(const n of names){const f=fixC({type:'Feature',geometry:topojson.merge(t,by[n]),name:n},n);fs.push(f);bn[n]=f;
-  PV[n]=by[n].map(g=>{const q=topojson.feature(t,g);const pf={type:'Feature',geometry:q.geometry,name:g.properties.pn,country:n};pf.c=d3.geoCentroid(pf);const b=d3.geoBounds(pf);pf.rad=Math.max(d3.geoDistance(pf.c,b[0]),d3.geoDistance(pf.c,b[1]))/1.6;return pf;});}
+  PV[n]=by[n].map(g=>{const q=topojson.feature(t,g);const pf={type:'Feature',geometry:q.geometry,name:g.properties.pn,country:n};pf.c=d3.geoCentroid(pf);pf.a=d3.geoArea(pf);const b=d3.geoBounds(pf);pf.rad=Math.max(d3.geoDistance(pf.c,b[0]),d3.geoDistance(pf.c,b[1]))/1.6;return pf;});markOverseas(PV[n]);}
  const nb=topojson.neighbors(names.map(n=>topojson.mergeArcs(t,by[n])));names.forEach((n,i)=>ng[n]=nb[i].map(j=>names[j]));
  return GEOP={feats:fs,byName:bn,neigh:ng,PV};});}
 function setMode(m){MODE=m;const g=m==='prov'?GEOP:GEO110;feats=g.feats;byName=g.byName;neigh=g.neigh;document.body.classList.toggle('provMode',m==='prov');}
@@ -313,14 +313,24 @@ const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')sync
 addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
 syncDrawers();kick();
 // ---------- provinces: a box of named, fogged province pieces pops out for each placed country ----------
-let provPlaced=new Set(),provOpen=[];// provOpen: countries whose provinces are still being placed (in order)
+let provPlaced=new Set(),provOpen=[],overseasAnim={};// provOpen: countries whose provinces are still being placed (in order)
 const pbox=document.createElement('div');pbox.id='provBox';pbox.hidden=true;document.body.appendChild(pbox);
 function provPending(){return provOpen[0]||null}
-function provReset(){provPlaced=new Set();provOpen=[];pbox.hidden=true;pbox.innerHTML='';}
+function provReset(){provPlaced=new Set();provOpen=[];for(const k of Object.keys(overseasAnim||{}))delete overseasAnim[k];pbox.hidden=true;pbox.innerHTML='';}
 function provKey(pf){return pf.country+'|'+pf.name}
-function provLeft(n){return (GEOP.PV[n]||[]).filter(pf=>!provPlaced.has(provKey(pf)))}
-function openProv(n,quiet){if(!provLeft(n).length){return}if(!provOpen.includes(n))provOpen.push(n);renderProv(!quiet);}
-function renderProv(pop){const n=provPending();if(!n){pbox.hidden=true;pbox.innerHTML='';return}const L=provLeft(n),tot=GEOP.PV[n].length;
+/* Far-flung overseas: not in the densest geographic cluster (join ≤2800 km). */
+function markOverseas(feats){if(!feats||feats.length<2){for(const f of feats||[])f.overseas=false;return}
+ const JOIN=2800/6371,NEAR=800/6371;let best=feats[0],bestN=-1;
+ for(const f of feats){let n=0;for(const g of feats)if(g!==f&&d3.geoDistance(f.c,g.c)<NEAR)n++;if(n>bestN||(n===bestN&&(f.a||0)>(best.a||0))){best=f;bestN=n}}
+ const main=new Set([best]);let grew=true;
+ while(grew){grew=false;for(const f of feats){if(main.has(f))continue;for(const m of main){if(d3.geoDistance(f.c,m.c)<=JOIN){main.add(f);grew=true;break}}}}
+ for(const f of feats)f.overseas=!main.has(f)}
+function provAll(n){return GEOP.PV[n]||[]}
+function provMainland(n){return provAll(n).filter(pf=>!pf.overseas)}
+function provOverseas(n){return provAll(n).filter(pf=>pf.overseas)}
+function provLeft(n){return provMainland(n).filter(pf=>!provPlaced.has(provKey(pf)))}
+function openProv(n,quiet){if(!provLeft(n).length){ensureOverseas(n,true);return}if(!provOpen.includes(n))provOpen.push(n);renderProv(!quiet);}
+function renderProv(pop){const n=provPending();if(!n){pbox.hidden=true;pbox.innerHTML='';return}const L=provLeft(n),tot=provMainland(n).length;
  pbox.innerHTML=`<div class="pbh"><b>Provinces of ${n}</b> <span>${tot-L.length} / ${tot}</span></div><div class="pbl"></div>`;const box=pbox.lastChild;
  for(const pf of L){const d=document.createElement('div');d.className='pv';d.dataset.n=pf.name;const g=shapeSVG(pf,Math.min(60/Math.max(pf.rad,.004)/2.2,2400));d.innerHTML=g.svg+`<span>${pf.name}</span>`;
   const sv=d.firstChild;sv.setAttribute('width',54);sv.setAttribute('height',54);d.addEventListener('pointerdown',e=>provDrag(e,pf,d));box.appendChild(d);}
@@ -335,9 +345,28 @@ function provCancel(){if(!pdrag)return false;const {el,gh}=pdrag;el.onpointermov
 function provFits(pf,x,y){const ll=G3.pick(x,y);if(!ll)return false;if(d3.geoContains(pf,ll))return true;if(d3.geoDistance(ll,pf.c)<Math.max(.02,pf.rad*.6))return true;
  if(G3.facing(pf.c[0],pf.c[1])){const [px,py]=G3.project(pf.c[0],pf.c[1]);if(Math.hypot(px-x,py-y)<22)return true}return false}
 function provDrop(pf,x,y,el){if(provFits(pf,x,y)){placeProv(pf);return}play('miss');el.animate([{transform:'translateX(-6px)'},{transform:'translateX(6px)'},{transform:'none'}],{duration:280});}
-function placeProv(pf,quiet){provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[pf.country][0]);if(quiet)return;play('place');
- const n=pf.country;if(!provLeft(n).length){provOpen=provOpen.filter(q=>q!==n);say(`✅ ${n} complete! Connect the next country.`,2600);renderProv(true);joinParked();
-  if(placed.size==pieces.length&&!provOpen.length){play('win');setTimeout(()=>say('🎉 You finished the puzzle! 🎉',5000),2700);}}else renderProv(false);}
+function placeProv(pf,quiet){if(provPlaced.has(provKey(pf)))return;provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[pf.country][0]);if(quiet)return;play('place');afterProvPlace(pf.country)}
+function afterProvPlace(n){const main=provMainland(n),left=provLeft(n),overLeft=provOverseas(n).filter(pf=>!provPlaced.has(provKey(pf)));
+ const done=main.length-left.length;
+ if(overLeft.length&&done*2>=main.length&&!overseasAnim[n]){startOverseasAnim(n,()=>afterProvPlace(n));renderProv(false);return}
+ if(overseasAnim[n]){renderProv(false);return}
+ if(left.length){renderProv(false);return}
+ completeProvCountry(n)}
+function completeProvCountry(n){ensureOverseas(n,true);provOpen=provOpen.filter(q=>q!==n);say(`✅ ${n} complete! Connect the next country.`,2600);renderProv(true);joinParked();
+ if(placed.size==pieces.length&&!provOpen.length){play('win');setTimeout(()=>say('🎉 You finished the puzzle! 🎉',5000),2700)}}
+function ensureOverseas(n,silent){for(const pf of provOverseas(n)){if(!provPlaced.has(provKey(pf))){provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[n][0]);if(!silent)play('place')}}}
+function startOverseasAnim(n,done){const over=provOverseas(n).filter(pf=>!provPlaced.has(provKey(pf)));if(!over.length){done&&done();return}
+ overseasAnim[n]=true;say(`Overseas parts of ${n} are settling in…`,2200);
+ let i=0;const step=()=>{if(i>=over.length){delete overseasAnim[n];done&&done();return}
+  const pf=over[i++];animateOverseasIn(pf,()=>{if(!provPlaced.has(provKey(pf))){provPlaced.add(provKey(pf));G3.provNow(pf,FACTS[n][0])}
+   if(i===1)play('place');setTimeout(step,260)})};step()}
+function animateOverseasIn(pf,done){const g=document.createElement('div');g.className='ovFly';g.textContent=pf.name;
+ const box=pbox.getBoundingClientRect();const x0=box.left+box.width/2,y0=box.top||innerHeight-80;
+ g.style.left=x0+'px';g.style.top=y0+'px';document.body.appendChild(g);
+ const fly=()=>{const on=G3.facing(pf.c[0],pf.c[1]);const [x,y]=on?G3.project(pf.c[0],pf.c[1]):[innerWidth/2,innerHeight*0.45];
+  g.style.transform=`translate(${x-x0}px,${y-y0}px) scale(.35)`;g.style.opacity='0';
+  setTimeout(()=>{g.remove();done()},520)};
+ if(!G3.facing(pf.c[0],pf.c[1])){spinTo(pf.c,1.5);setTimeout(fly,950)}else setTimeout(fly,40)}
 // ---------- start menu ----------
 const SM_OPTS=[{k:'global',t:'Global',i:'<svg class="tg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.5" fill="#2d6fa8" stroke="#cfe6ff" stroke-width="1.2"/><path d="M5 6c2 0 3 1 3 3s-2 2-2 4 1 3 1 3M12 3.5c-1 2 1 3 3 3.5s2 3 0 4-2 3-1 4" fill="none" stroke="#9bd17a" stroke-width="2" stroke-linecap="round"/></svg>'},{k:'cont',t:'Continents',i:''},{k:'prov',t:'Provinces',i:''}];
 const CONT_SETS=[['Africa','Africa'],['Asia','Asia'],['Europe','Europe'],['Americas','Americas'],['Oceania','Oceania + Antarctica']];
@@ -376,7 +405,10 @@ async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();sm.hidden=
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;
  G3.setQuat(S.quat);
  for(const n of S.placed){const p=byN[n];if(!p)continue;placed.add(n);if(MODE==='prov')G3.fog(p.f);else G3.placeNow(p.f,FACTS[n][0]);for(const c of cols(n)){const st=document.createElement('div');st.className='stripe';st.style.background=c;st.style.height=(100/stripeTotal)+'%';$('tubeFill').appendChild(st);}}
- if(MODE==='prov'){const K=new Set(S.provPlaced||[]);for(const n of S.placed)for(const pf of GEOP.PV[n]||[])if(K.has(provKey(pf)))placeProv(pf,true);for(const n of (S.provOpen||[]))openProv(n,true);}
+ if(MODE==='prov'){const K=new Set(S.provPlaced||[]);for(const n of S.placed)for(const pf of GEOP.PV[n]||[])if(K.has(provKey(pf)))placeProv(pf,true);
+  for(const n of (S.provOpen||[]))openProv(n,true);
+  for(const n of S.placed){const main=provMainland(n),done=main.filter(pf=>provPlaced.has(provKey(pf))).length;
+   if(done===main.length||done*2>=main.length)ensureOverseas(n,true);}}
  for(const q of S.pieces)if(q.st==='parked')park(byN[q.n],[q.lon,q.lat],q.s);
  if(S.anc){const p=byN[S.anc.n];if(p&&p.parked){anc={p,step:S.anc.step};p.ov.classList.add('anc');p.ov.style.cursor='default';p.ov.addEventListener('pointerdown',ancDown);if(anc.step==='lat')G3.outline(p.f);else if(anc.step==='blink')nextStep();}}
  for(const q of S.pieces)if(q.st==='L'||q.st==='R'){const p=byN[q.n];if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}
@@ -402,7 +434,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
  openPause();},true);
 {const sb=document.createElement('button');sb.id='startB';sb.textContent='Start menu';$('menuL').prepend(sb);sb.onclick=()=>{$('menuL').hidden=true;if((placed.size||parked.length)&&!confirm('Go to the start menu? Unsaved progress will be lost when you start a new game.'))return;openStart();};}
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
-Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
+Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,afterProvPlace,ensureOverseas});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
 Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});
 })();

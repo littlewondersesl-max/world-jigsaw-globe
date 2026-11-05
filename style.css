@@ -104,3 +104,4 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #provBox .pv{width:74px;display:flex;flex-direction:column;align-items:center;cursor:grab;touch-action:none;border-radius:6px;padding:2px}#provBox .pv:hover{background:#ffffff14}
 #provBox .pv span{font-size:10px;text-align:center;line-height:1.1;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #provBox .pc,.pvg .pc{filter:grayscale(1) sepia(.35) hue-rotate(170deg) saturate(1.6) brightness(.95)}
+#provBox .ovFly,.ovFly{position:fixed;z-index:20;pointer-events:none;padding:4px 8px;border-radius:8px;background:#4a6a88ee;color:#e8eef3;font:12px system-ui,sans-serif;transition:transform .5s ease,opacity .5s ease;white-space:nowrap;box-shadow:0 4px 14px #0008}
