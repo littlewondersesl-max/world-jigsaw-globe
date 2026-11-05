@@ -80,7 +80,7 @@ function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.p
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
  el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved&&ev.type==='pointerup')window.__release(d.p,ev.clientX,ev.clientY);};}
 window.addEventListener('wheel',e=>{if(drag){e.preventDefault();e.stopPropagation();setAngle(drag.p,drag.p.angle+(e.deltaY>0?15:-15));updateGhostShape();}},{passive:false,capture:true});
-window.addEventListener('keydown',e=>{if(!sel)return;if(e.key=='q'||e.key=='Q')setAngle(sel,sel.angle-15);if(e.key=='e'||e.key=='E')setAngle(sel,sel.angle+15);});
+window.addEventListener('keydown',e=>{if(!sel||e.ctrlKey||e.metaKey||e.altKey||(e.target.closest&&e.target.closest('select,input,textarea')))return;if(e.key=='q'||e.key=='Q')setAngle(sel,sel.angle-15);if(e.key=='e'||e.key=='E')setAngle(sel,sel.angle+15);});
 $('rl').onclick=()=>sel&&setAngle(sel,sel.angle-15);$('rr').onclick=()=>sel&&setAngle(sel,sel.angle+15);
 function say(t,ms){const m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(say.t);say.t=setTimeout(()=>m.style.display='none',ms||1800);}
 function bounce(p){play('miss');if(p.el){p.el.animate([{transform:'translateX(-8px)'},{transform:'translateX(8px)'},{transform:'none'}],{duration:300});}}
@@ -304,3 +304,5 @@ document.getElementById('credB').onclick=()=>{L.hidden=true;P.hidden=false};docu
 (function(){const st=document.getElementById('stack'),sg=document.getElementById('stage');if(!st||!sg)return;
  const f=()=>{const r=sg.getBoundingClientRect();st.style.bottom=Math.max(14,innerHeight-r.bottom+14)+'px';st.style.left=Math.max(14,r.left+14)+'px';};
  addEventListener('resize',f);setTimeout(f,0);setTimeout(f,1500);})();
+// after using a top-bar control, hand the keyboard back to the game (Q/E rotate, Esc) instead of the control
+document.addEventListener('change',e=>{if(e.target.matches&&e.target.matches('header select,header input,#topbar select,#topbar input'))setTimeout(()=>e.target.blur(),0);});
