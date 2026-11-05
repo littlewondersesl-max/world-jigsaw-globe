@@ -169,7 +169,7 @@ function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used
 $('h1').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,1);setAngle(p,0);$('hintText').innerHTML='⬆️ This way is UP (north). I turned the piece for you!';updHints();};
 $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=p.f.name,f=FACTS[n],nb=(neigh[n]||[]);
  $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${f[5]}`;updHints();};
-$('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c,p.f.rad<.15?3:1.4);G3.pulse(p.f,5000);$('hintText').innerHTML+='<br>✨ Look for the yellow glow!';updHints();};
+$('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c,Math.max(1.4,Math.min(3,6.2/(1+19*p.f.rad))));G3.pulse(p.f,5000);$('hintText').innerHTML+='<br>✨ Look for the yellow glow!';updHints();};
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';};
 $('set').onchange=buildSet;$('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl').onchange=e=>G3.labels(e.target.checked);
 // ---------- load ----------
