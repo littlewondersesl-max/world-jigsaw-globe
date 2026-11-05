@@ -129,7 +129,7 @@ const LW=new THREE.Vector3();function labels(){if(lblBox.hidden)return;const r=R
  const vis=LW.clone().normalize().dot(C.position.clone().sub(LW).normalize())>.05;const p=LW.project(C);
  const cpx=(WKM[l.n]||200)/6371*1.5*ppu*.85,fs=Math.min(22,cpx/(l.n.length*.62));
  const x=r.left-hr.left+(p.x+1)/2*r.width,y=r.top-hr.top+(1-p.y)/2*r.height,w=l.n.length*fs*.62+4,h=fs+3;
- let ok=vis&&p.z<1&&fs>=8;if(ok)for(const b of boxes)if(Math.abs(b[0]-x)*2<b[2]+w&&Math.abs(b[1]-y)*2<b[3]+h){ok=false;break}
+ let ok=vis&&p.z<1&&fs>=8&&(!window.G3||!G3.labelOk||G3.labelOk(l.n));if(ok)for(const b of boxes)if(Math.abs(b[0]-x)*2<b[2]+w&&Math.abs(b[1]-y)*2<b[3]+h){ok=false;break}
  if(ok)boxes.push([x,y,w,h]);l.el.style.display=ok?'':'none';l.el.style.fontSize=fs.toFixed(1)+'px';
  l.el.style.transform=`translate(${x}px,${y}px) translate(-50%,-50%)`;}}
 // ---- city streaming (LOD + activity gating) ----

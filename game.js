@@ -309,3 +309,4 @@ document.getElementById('credB').onclick=()=>{L.hidden=true;P.hidden=false};docu
 // after using a top-bar control, hand the keyboard back to the game (Q/E rotate, Esc) instead of the control
 document.addEventListener('change',e=>{if(e.target.matches&&e.target.matches('header select,header input,#topbar select,#topbar input'))setTimeout(()=>e.target.blur(),0);});
 addEventListener('keydown',e=>{const c=document.getElementById('card');if(e.key==='Escape'&&c&&!c.hidden&&!(window.__game&&__game.carrying))document.getElementById('cOk').click();});// Esc closes the fact card (Enter/Space work via focus)
+(function lf(){if(!window.G3)return setTimeout(lf,200);G3.labelOk=n=>!!(window.__game&&__game.placed.has(n));})();// name a country only once it is placed (no spoilers, no stray names outside the set)
