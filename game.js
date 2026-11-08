@@ -99,16 +99,17 @@ const layer=document.createElement('div');layer.id='park';document.body.appendCh
 let WOOD=null;fetch('wood.jpg').then(r=>r.blob()).then(b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)})).then(u=>WOOD=u);
 let pcN=0;function pcTex(p,g){const C=1024,cid=(g.svg.match(/clipPath id="([^"]+)"/)||[])[1],svg=g.svg.replace('stroke="#2a170a"',`clip-path="url(#${cid})" stroke="#2a170a"`).replace(/^<svg /,'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ').replace(/width="[\d.]+" height="[\d.]+">/,`width="${C}" height="${C}">`)
   .replace('<defs>',`<defs><pattern id="wood" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="${WOOD||'wood.jpg'}" width="1" height="1" preserveAspectRatio="none"/></pattern>`);
- const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=C;const x=c.getContext('2d');x.drawImage(im,0,0,C,C);
+ const im=new Image();const pidAt=p.pid;im.onload=()=>{if(p.pid!==pidAt)return;const c=document.createElement('canvas');c.width=c.height=C;const x=c.getContext('2d');x.drawImage(im,0,0,C,C);
   // Keep only the country silhouette so a square mesh cannot paint a detached wood slab outside the shape.
   if(g.d){x.globalCompositeOperation='destination-in';x.save();x.translate(C/2,C/2);x.scale(C/(2*g.r),C/(2*g.r));x.fill(new Path2D(g.d));x.restore();x.globalCompositeOperation='source-over';}
-  const add=()=>G3.pc.add(p.pid,c,g.r/K);if(window.G3)add();else addEventListener('g3ready',add,{once:true});};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
+  const add=()=>{if(p.pid===pidAt)G3.pc.add(pidAt,c,g.r/K);};if(window.G3)add();else addEventListener('g3ready',add,{once:true});};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
+function dropMesh(p){if(!p.pid)return;if(window.G3)G3.pc.del(p.pid);p.pid=null;}
 function mkOverlay(p){const o=document.createElement('div');o.className='pk';const g=shapeSVG(p.f,K);o.innerHTML=g.svg;o.r=g.r;o.style.width=o.style.height=2*g.r+'px';
- o.firstChild.style.transform=`rotate(${p.angle}deg)`;layer.appendChild(o);p.pid='pc'+(pcN++);p._ang=(g.m||g.r)/2/K;pcTex(p,g);return o;}
-function buildMesh(p){if(p.pid)return;const g=shapeSVG(p.f,K);p.pid='pc'+(pcN++);p._ang=(g.m||g.r)/2/K;pcTex(p,g);}
+ o.firstChild.style.transform=`rotate(${p.angle}deg)`;layer.appendChild(o);p.pid='pc'+(pcN++);p._h=g.r/K;p._ang=(g.m||g.r)/2/K;pcTex(p,g);return o;}
+function buildMesh(p){if(p.pid&&window.G3&&G3.pc.has(p.pid))return;p.pid=null;const g=shapeSVG(p.f,K);p.pid='pc'+(pcN++);p._h=g.r/K;p._ang=(g.m||g.r)/2/K;pcTex(p,g);}
 function park(p,ll,s){if(!p.parked){p.parked=true;parked.push(p);p.ov=mkOverlay(p);p.ov.addEventListener('pointerdown',e=>{if(anc&&anc.p===p)return;startDrag(e,p,p.ov)});p.ov.addEventListener('wheel',e=>{if(!drag){e.preventDefault();G3.dom.dispatchEvent(new WheelEvent('wheel',e));}},{passive:false});}
  p.el=p.ov;p.lon=ll[0];p.lat=ll[1];p.s=s;renderTray();}
-function unpark(p){if(!p.parked)return;p.parked=false;G3.pc.del(p.pid);parked=parked.filter(q=>q!==p);p.ov.remove();p.ov=null;}
+function unpark(p){if(!p.parked)return;p.parked=false;dropMesh(p);parked=parked.filter(q=>q!==p);if(p.ov){p.ov.remove();p.ov=null;}}
 function boxScale(f){return trayScale(f)*86/88/Math.max(G3.screenRadius(),1);}
 function posOv(p){const o=p.ov;if(!o)return;G3.pc.set(p.pid,{lon:p.lon,lat:p.lat,s:p.s,a:p.angle,op:p.op??1,vis:!(drag&&drag.p===p)});if(!G3.facing(p.lon,p.lat)){if(o._d!=='none'){o.style.display='none';o._d='none';}return}if(o._d!==''){o.style.display='';o._d='';}const [x,y]=G3.project(p.lon,p.lat);
  const k=G3.screenRadius()*p.s/K;const tf=`translate(${(x-o.r).toFixed(1)}px,${(y-o.r).toFixed(1)}px) scale(${k.toFixed(4)})`;if(o._tf!==tf){o.style.transform=tf;o._tf=tf;}p.sx=x;p.sy=y;p.spx=o.r*k;}
@@ -484,8 +485,8 @@ function isUiBlocked(x,y){try{const el=document.elementFromPoint(x,y);if(!el)ret
   if(el.closest&&(el.closest('.spPiece')||el.closest('#ghost')||el.closest('.ride')||el.closest('.coinFly')||el.closest('.pk')))return false;
   if(el.closest&&el.closest('.dh'))return true;
   return !!(el.closest&&el.closest('#machines,#hints,#hudCol,#stack,#zoom,#menuW,#topbar,header,#tubeBar,#countriesWrap,#placeTab,#countriesDrop,#pouchWrap,#provBox,#card,#credP,#startM,#pause,.drawer:not(.shut),#scr'));}catch(e){return false;}}
-function uiRects(){const rects=[];for(const s of ['header','#tubeBar','#hudCol','#stack','#zoom','#pouchWrap','#menuW','#provBox']){const el=document.querySelector(s);if(!el||el.hidden)continue;const r=el.getBoundingClientRect();if(r.width>2&&r.height>2&&r.bottom>0&&r.right>0)rects.push(r);}
- if(DR.R&&DR.R.open>1)rects.push(DR.R.el.getBoundingClientRect());if(DR.L&&DR.L.open>1)rects.push(DR.L.el.getBoundingClientRect());return rects;}
+function uiRects(){const rects=[];for(const s of ['header','#tubeBar','#hudCol','#stack','#zoom','#pouchWrap','#menuW','#provBox','#scr']){const el=document.querySelector(s);if(!el||el.hidden)continue;const r=el.getBoundingClientRect();if(r.width>2&&r.height>2&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth)rects.push(r);}
+ for(const side of ['L','R']){const o=DR[side];if(!o)continue;if(o.open>1)rects.push(o.el.getBoundingClientRect());else if(o.h){const r=o.h.getBoundingClientRect();if(r.width>2&&r.height>2)rects.push(r);}}return rects;}
 function overlapsUI(box){const m=14;if(box.minX<m||box.minY<m||box.maxX>innerWidth-m||box.maxY>innerHeight-m)return true;
  for(const r of uiRects())if(box.maxX>r.left-m&&box.minX<r.right+m&&box.maxY>r.top-m&&box.minY<r.bottom+m)return true;return false;}
 function maxOrbitRad(){const cam=G3.cam().p,D=Math.hypot(cam[0],cam[1],cam[2]);const g=Math.max(48,G3.screenRadius());
@@ -497,15 +498,27 @@ function makeOrbit(dir,speed,sign){let x=dir.x,y=dir.y,z=dir.z,len=Math.hypot(x,
  const vx=ay*z-az*y,vy=az*x-ax*z,vz=ax*y-ay*x;return {ux:x,uy:y,uz:z,vx,vy,vz,ang:0,angV:(sign<0?-1:1)*speed};}
 function screenDir(x,y){const ll=G3.pick(x,y);if(ll){const la=ll[1]*Math.PI/180,lo=ll[0]*Math.PI/180;return {x:Math.cos(la)*Math.sin(lo),y:Math.sin(la),z:Math.cos(la)*Math.cos(lo)};}return G3.viewDirLocal();}
 function syncOrb(s){const d=orbDir(s),ll=dirToLonLat(d);s.lon=ll[0];s.lat=ll[1];}
-function orbitBad(p){const s=p.space;if(!s||!G3.sampleBox)return false;const box=G3.sampleBox(s.lon,s.lat,s.rad,(p._ang||0.03)*(s.drawS||1));if(!box.anyVis)return false;return overlapsUI(box);}
-function settleOrbit(p){const s=p.space;for(let i=0;i<40;i++){syncOrb(s);if(!orbitBad(p))break;s.ang+=0.14;if(i%5===4)s.drawS=Math.max(0.34,(s.drawS||1)*0.9);}s.prevAng=s.ang;syncOrb(s);}
-function applyOrb(p){const s=p.space;if(!s||!p.pid)return;G3.pc.set(p.pid,{lon:s.lon,lat:s.lat,s:s.drawS||1,a:p.angle,rad:s.rad,op:1,vis:true});}
+function orbitBad(p){const s=p.space;if(!s||!G3.sampleBox)return false;const box=G3.sampleBox(s.lon,s.lat,s.rad,p._h||p._ang||0.05,s.drawS||1,p.angle||0);if(!box.anyVis||!isFinite(box.minX))return false;s.box=box;return overlapsUI(box);}
+function rememberGood(p){const s=p.space;if(orbitBad(p))return;s.good={ang:s.ang,rad:s.rad,drawS:s.drawS,lon:s.lon,lat:s.lat};}
+function restoreGood(p){const g=p.space.good;if(!g)return false;p.space.ang=g.ang;p.space.rad=g.rad;p.space.drawS=g.drawS;p.space.lon=g.lon;p.space.lat=g.lat;return true;}
+function settleOrbit(p){const s=p.space;let found=false;
+ for(let i=0;i<56;i++){syncOrb(s);if(!orbitBad(p)){found=true;break;}s.ang+=0.16;if(i%4===3)s.drawS=Math.max(0.12,(s.drawS||1)*0.72);}
+ if(!found){s.drawS=0.12;for(let i=0;i<40&&orbitBad(p);i++){s.ang+=0.16;syncOrb(s);}found=!orbitBad(p);}
+ if(found)rememberGood(p);else if(!restoreGood(p))syncOrb(s);}
+function applyOrb(p){const s=p.space;if(!s||!p.pid)return;if(orbitBad(p)){if(!restoreGood(p)||orbitBad(p)){G3.pc.set(p.pid,{lon:s.lon,lat:s.lat,s:s.drawS||1,a:p.angle,rad:s.rad,op:1,vis:false});return;}}
+ G3.pc.set(p.pid,{lon:s.lon,lat:s.lat,s:s.drawS||1,a:p.angle,rad:s.rad,op:1,vis:true});rememberGood(p);}
 function stepOrbit(p,dt){const s=p.space;s.ang+=s.angV*dt;syncOrb(s);
- const cap=maxOrbitRad();if(s.rad>cap)s.rad+=(cap-s.rad)*Math.min(1,dt*2);if(s.rad<MIN_RAD)s.rad=MIN_RAD;
+ const cap=maxOrbitRad();if(s.rad>cap)s.rad=cap;if(s.rad<MIN_RAD)s.rad=MIN_RAD;
  if(orbitBad(p)){s.angV*=-1;let cleared=false;
-  for(let i=0;i<18;i++){s.ang+=s.angV*0.06;syncOrb(s);if(!orbitBad(p)){cleared=true;break;}}
-  if(!cleared){s.drawS=Math.max(0.32,(s.drawS||1)*0.86);s.rad=Math.max(MIN_RAD,Math.min(s.rad,cap));syncOrb(s);}
- }s.prevAng=s.ang;applyOrb(p);}
+  for(let i=0;i<28;i++){s.ang+=s.angV*0.07;syncOrb(s);if(!orbitBad(p)){cleared=true;break;}}
+  if(!cleared){s.drawS=Math.max(0.12,(s.drawS||1)*0.75);
+   if(s.good){s.ang=s.good.ang;s.rad=Math.min(s.good.rad,cap);syncOrb(s);}
+   for(let i=0;i<36&&orbitBad(p);i++){s.ang+=0.18;syncOrb(s);}
+   if(orbitBad(p))restoreGood(p);
+  }
+ }
+ if(!orbitBad(p))rememberGood(p);else restoreGood(p);
+ applyOrb(p);}
 function remSpace(p){if(!p||!p.space)return;if(p.pid&&!p.parked){G3.pc.del(p.pid);p.pid=null;}p.space=null;kickSpace();}
 function addSpace(p,x,y,vx,vy,mode){if(p.parked)unpark(p);if(p.body)remBody(p);remSpace(p);p.onPlat=null;p.onBelt=null;buildMesh(p);
  const spd=Math.hypot(vx||0,vy||0),orbiting=mode==='orbit'||spd>=THROW_SPD;
@@ -703,7 +716,7 @@ async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();for(const 
  const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;p.finder=q.finder?JSON.parse(JSON.stringify(q.finder)):null;p.finderLost=!!q.finderLost;return p}).filter(Boolean);
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;
  G3.setQuat(S.quat);
- anchorName=S.anchorName||(S.anc&&S.anc.n)||null;
+ anchorName=S.anchorName||(S.anc&&S.anc.n)||(S.placed&&S.placed[0])||null;
  for(const n of S.placed){const p=byN[n];if(!p)continue;placed.add(n);if(MODE==='prov')G3.fog(p.f);else G3.placeNow(p.f,FACTS[n][0]);for(const c of cols(n)){const st=document.createElement('div');st.className='stripe';st.style.background=c;st.style.width=(100/stripeTotal)+'%';st.style.height='100%';$('tubeFill').appendChild(st);}}
  if(MODE==='prov'){const K=new Set(S.provPlaced||[]);for(const n of S.placed)for(const pf of GEOP.PV[n]||[])if(K.has(provKey(pf)))placeProv(pf,true);
   provFind=Object.assign({},S.provFind||{});
