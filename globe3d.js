@@ -25,10 +25,11 @@ c+=stars(d,420.,.985)*.5;
 gl_FragColor=vec4(c,1.);}`}));S.add(bg);
 // Earth-neighbourhood sky, fixed in the scene (not parented to the spinning globe).
 // Distances are shortened so the Sun, Earth's orbit, the Moon and Mars fit in view.
+// The orbit line is thin and fades toward the far side. The Moon sits farther from Earth than the globe, still well inside Mars.
 // The globe is Earth. The bright body is the Sun. The line is Earth's path around the Sun.
 const skyNear=new THREE.Group();S.add(skyNear);
 const sunPos=new THREE.Vector3(0,3.16,-6.54);
-const sunBoard=new THREE.Mesh(new THREE.PlaneGeometry(1.9,1.9),new THREE.ShaderMaterial({
+const sunBoard=new THREE.Mesh(new THREE.PlaneGeometry(3.5,3.5),new THREE.ShaderMaterial({
  transparent:true,depthWrite:false,depthTest:true,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,
  vertexShader:`varying vec2 v;void main(){v=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
  fragmentShader:`varying vec2 v;void main(){vec2 p=v*2.-1.;float r=length(p);if(r>1.) discard;
@@ -36,16 +37,17 @@ const sunBoard=new THREE.Mesh(new THREE.PlaneGeometry(1.9,1.9),new THREE.ShaderM
   vec3 col=vec3(4.,3.6,3.)*core+vec3(1.,.8,.55)*(.62*exp(-r*r*7.)+.2*exp(-r*r*1.5));
   gl_FragColor=vec4(col,clamp(core+exp(-r*r*2.4)*.9,0.,1.));}`}));
 sunBoard.position.copy(sunPos);sunBoard.renderOrder=1;skyNear.add(sunBoard);
-const bodyMat=color=>new THREE.ShaderMaterial({uniforms:{sunP:{value:sunPos},albedo:{value:new THREE.Color(color)}},
+const bodyMat=(color,soft=0)=>new THREE.ShaderMaterial({uniforms:{sunP:{value:sunPos},albedo:{value:new THREE.Color(color)},soft:{value:soft}},
  vertexShader:`varying vec3 wn,wp;void main(){wn=normalize(mat3(modelMatrix)*normal);wp=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
- fragmentShader:`uniform vec3 sunP,albedo;varying vec3 wn,wp;
+ fragmentShader:`uniform vec3 sunP,albedo;uniform float soft;varying vec3 wn,wp;
   void main(){vec3 L=normalize(sunP-wp);float nd=dot(normalize(wn),L);
-   vec3 col=albedo*(.08+.92*smoothstep(-.2,.55,nd));
+   float lit=smoothstep(-.25,.75,nd);
+   vec3 col=albedo*(mix(.08,.26,soft)+mix(.92,.6,soft)*lit);
    float rim=pow(1.-abs(dot(normalize(wn),normalize(cameraPosition-wp))),2.);
-   gl_FragColor=vec4(col+albedo*rim*.15,1.);}`});
+   gl_FragColor=vec4(col+albedo*rim*mix(.12,.04,soft),1.);}`});
 const moon=new THREE.Mesh(new THREE.SphereGeometry(.28,24,16),bodyMat(0xd7d2c8));
-moon.position.set(-2.35,.55,-1.35);skyNear.add(moon);
-const mars=new THREE.Mesh(new THREE.SphereGeometry(.36,24,16),bodyMat(0xc45532));
+moon.position.set(-3.15,1.62,-3.35);skyNear.add(moon);
+const mars=new THREE.Mesh(new THREE.SphereGeometry(.42,24,16),bodyMat(0x7a5c4a,1));
 const venus=new THREE.Mesh(new THREE.SphereGeometry(.22,24,16),bodyMat(0xe6d2a2));
 const earthR=sunPos.length();
 const view=new THREE.Vector3(0,0,1);
@@ -59,9 +61,9 @@ skyNear.add(venus);skyNear.add(mars);
 const orbitPts=[];
 for(let i=0;i<160;i++)orbitPts.push(onOrbit(earthR,i/160*Math.PI*2));
 const orbitCurve=new THREE.CatmullRomCurve3(orbitPts,true);
-const orbitLine=new THREE.Mesh(new THREE.TubeGeometry(orbitCurve,160,.055,5,true),new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,
- vertexShader:`varying float hide;void main(){vec4 w=modelMatrix*vec4(position,1.);hide=smoothstep(2.15,4.6,length(w.xyz));gl_Position=projectionMatrix*viewMatrix*w;}`,
- fragmentShader:`varying float hide;void main(){gl_FragColor=vec4(.8,.88,1.,hide*.72);}`}));
+const orbitLine=new THREE.Mesh(new THREE.TubeGeometry(orbitCurve,160,.016,4,true),new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:true,side:THREE.DoubleSide,
+ vertexShader:`varying float hide;void main(){vec4 w=modelMatrix*vec4(position,1.);float d=length(w.xyz);hide=smoothstep(2.35,4.4,d)*smoothstep(12.5,7.6,d);gl_Position=projectionMatrix*viewMatrix*w;}`,
+ fragmentShader:`varying float hide;void main(){gl_FragColor=vec4(.72,.82,1.,hide*.34);}`}));
 orbitLine.renderOrder=1;skyNear.add(orbitLine);
 const G=new THREE.Group();S.add(G);
 const ocean=new THREE.Mesh(new THREE.SphereGeometry(1.5,160,96),new THREE.ShaderMaterial({uniforms:U,
@@ -247,19 +249,22 @@ function pcGeom(h,s){const N=40,pos=[],uv=[],idx=[];for(let j=0;j<=N;j++)for(let
  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,b,d,a,d,c);}
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);return g;}
 function pcAdd(id,canvas,h){pcDel(id);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;
- const m=new THREE.Mesh(pcGeom(h,1),new THREE.ShaderMaterial({uniforms:{map:{value:t},op:{value:1},sun:U.sun},transparent:true,depthWrite:false,depthTest:true,polygonOffset:true,polygonOffsetFactor:-4,
+ const m=new THREE.Mesh(pcGeom(h,1),new THREE.ShaderMaterial({uniforms:{map:{value:t},op:{value:1},hi:{value:0},sun:U.sun},transparent:true,depthWrite:false,depthTest:true,polygonOffset:true,polygonOffsetFactor:-4,
  vertexShader:`varying vec2 vu;varying vec3 wn;void main(){vu=uv;wn=normalize(mat3(modelMatrix)*normalize(position));gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
- fragmentShader:`uniform sampler2D map;uniform float op;uniform vec3 sun;varying vec2 vu;varying vec3 wn;void main(){vec4 c=texture2D(map,vu);if(c.a<.02)discard;vec3 N=normalize(wn);float l=dot(N,sun);
- vec3 col=pow(c.rgb,vec3(2.2))*(.22+1.*smoothstep(-.1,.35,l))+vec3(1.,.95,.85)*pow(max(dot(N,normalize(sun+vec3(0.,0.,1.))),0.),60.)*.08*smoothstep(0.,.3,l);gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;m.userData.pid=id;
+ fragmentShader:`uniform sampler2D map;uniform float op,hi;uniform vec3 sun;varying vec2 vu;varying vec3 wn;void main(){vec4 c=texture2D(map,vu);if(c.a<.02)discard;vec3 N=normalize(wn);float l=dot(N,sun);
+ vec3 col=pow(c.rgb,vec3(2.2))*(.22+1.*smoothstep(-.1,.35,l))+vec3(1.,.95,.85)*pow(max(dot(N,normalize(sun+vec3(0.,0.,1.))),0.),60.)*.08*smoothstep(0.,.3,l);
+ float edge=smoothstep(.42,.04,min(min(vu.x,1.-vu.x),min(vu.y,1.-vu.y)));
+ col+=vec3(1.,.86,.45)*hi*(.16+.5*edge);
+ gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;m.userData.pid=id;
  const hold=new THREE.Group();hold.add(m);G.add(hold);PCS[id]={hold,m,h,s:1,rad:PR};}
 const _e=new THREE.Vector3(),_n=new THREE.Vector3(),_u=new THREE.Vector3(),_M=new THREE.Matrix4(),_Q=new THREE.Quaternion();
 function pcSet(id,o){const P=PCS[id];if(!P)return;if(o.s!=null&&Math.abs(o.s-P.s)>1e-4){P.m.geometry.dispose();P.m.geometry=pcGeom(P.h,o.s);P.s=o.s;}
  const lo=THREE.MathUtils.degToRad(o.lon);_n.copy(sv(o.lon,o.lat));_e.set(Math.cos(lo),0,-Math.sin(lo));_u.crossVectors(_n,_e);_M.makeBasis(_e,_u,_n);P.hold.quaternion.setFromRotationMatrix(_M);
  const rad=o.rad||PR;P.hold.scale.setScalar(rad/PR);P.rad=rad;
- P.m.rotation.z=-THREE.MathUtils.degToRad(o.a||0);if(o.op!=null)P.m.material.uniforms.op.value=o.op;P.hold.visible=o.vis!==false;}
+ P.m.rotation.z=-THREE.MathUtils.degToRad(o.a||0);if(o.op!=null)P.m.material.uniforms.op.value=o.op;if(o.hi!=null)P.m.material.uniforms.hi.value=o.hi;P.hold.visible=o.vis!==false;}
 function pcDel(id){const P=PCS[id];if(!P)return;G.remove(P.hold);P.m.geometry.dispose();P.m.material.uniforms.map.value.dispose();P.m.material.dispose();delete PCS[id];}
 function pcHas(id){return !!PCS[id];}
-function pcInfo(id){const P=PCS[id];if(!P)return null;return {vis:!!P.hold.visible,rad:P.rad||PR};}
+function pcInfo(id){const P=PCS[id];if(!P)return null;return {vis:!!P.hold.visible,rad:P.rad||PR,depth:P.m.material.depthTest!==false,hi:P.m.material.uniforms.hi?P.m.material.uniforms.hi.value:0};}
 let OL=null;function outline(f){if(OL){G.remove(OL);OL.geometry.dispose();OL=null}if(!f)return;const pts=[];const geo=f.geometry;const polys=geo.type=='Polygon'?[geo.coordinates]:geo.coordinates;
  for(const p of polys)for(const ring of p){for(let i=0;i<ring.length-1;i++){const a=ring[i],b=ring[i+1],n=Math.max(1,Math.ceil(d3.geoDistance(a,b)/0.01));const it=d3.geoInterpolate(a,b);
   for(let k=0;k<n;k++){pts.push(sv(...it(k/n)).multiplyScalar(PR*1.001),sv(...it((k+1)/n)).multiplyScalar(PR*1.001));}}}
@@ -272,6 +277,7 @@ function provNow(f,cont){paint(bctx,TW,TH,f,cont);const pr=eq(TW,TH),gp=d3.geoPa
 function occludedWorld(world){const O=C.position,d=world.clone().sub(O),dist=d.length();if(dist<1e-4)return false;d.multiplyScalar(1/dist);
  const b=O.dot(d),c0=O.lengthSq()-1.52*1.52,disc=b*b-c0;if(disc<0)return false;const tN=-b-Math.sqrt(disc);return tN>0.02&&tN<dist-0.03;}
 function projectWorld(world){const p=world.clone().project(C),r=R.domElement.getBoundingClientRect();return {x:r.left+(p.x+1)/2*r.width,y:r.top+(1-p.y)/2*r.height,z:p.z,occluded:occludedWorld(world)};}
+function pieceView(lon,lat,rad){G.updateMatrixWorld(true);return projectWorld(sv(lon,lat).multiplyScalar(rad||PR).applyMatrix4(G.matrixWorld));}
 function sampleBox(lon,lat,rad,h,drawS,angle){G.updateMatrixWorld(true);const n=sv(lon,lat),lo=THREE.MathUtils.degToRad(lon),e=new THREE.Vector3(Math.cos(lo),0,-Math.sin(lo)),north=new THREE.Vector3().crossVectors(n,e);
  const th=-THREE.MathUtils.degToRad(angle||0),ca=Math.cos(th),sa=Math.sin(th),sc=drawS==null?1:drawS,hh=h||0.05;
  const uv=[[0,0],[hh,hh],[hh,-hh],[-hh,hh],[-hh,-hh],[hh,0],[-hh,0],[0,hh],[0,-hh],[hh*.5,hh*.5],[-hh*.5,hh*.5],[hh*.5,-hh*.5],[-hh*.5,-hh*.5]];
@@ -293,5 +299,5 @@ function pickPiece(x,y){G.updateMatrixWorld(true);const r=R.domElement.getBoundi
   if(alphaAt(h.object,h.uv)<16)continue;return h.object.userData.pid||null;}
  return null;}
 function viewDirLocal(){const w=C.position.clone().normalize().applyQuaternion(G.quaternion.clone().invert());return {x:w.x,y:w.y,z:w.z};}
-window.G3={fog:fogNow,provNow,pc:{add:pcAdd,set:pcSet,del:pcDel,has:pcHas,info:pcInfo},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),setQuat:q=>{G.quaternion.fromArray(q);G.updateMatrixWorld();},cam:()=>({p:C.position.toArray(),t:O.target.toArray()}),setCam:c=>{C.position.fromArray(c.p);O.target.fromArray(c.t);O.update();},project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},sampleBox,pickPiece,viewDirLocal,C,O};
+window.G3={fog:fogNow,provNow,pc:{add:pcAdd,set:pcSet,del:pcDel,has:pcHas,info:pcInfo},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),setQuat:q=>{G.quaternion.fromArray(q);G.updateMatrixWorld();},cam:()=>({p:C.position.toArray(),t:O.target.toArray()}),setCam:c=>{C.position.fromArray(c.p);O.target.fromArray(c.t);O.update();},project,pieceView,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},sampleBox,pickPiece,viewDirLocal,C,O};
 window.dispatchEvent(new Event('g3ready'));
