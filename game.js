@@ -506,7 +506,7 @@ function spawnPlaceCoins(p){if(!p||!window.G3)return;const c=p.f.c;if(!G3.facing
 
 // ---------- planet-relative orbit ----------
 // Phase only advances. Screen edges and the HUD never reverse it or freeze the last safe pose.
-// Radius stays on a fixed shell around Earth. The globe occludes the far side; drawing is masked where it would cover the HUD.
+// Radius stays on a fixed shell around Earth. Each frame the visible part of the mesh is measured, shrunk if it meets the HUD, and hidden for that frame if it still does. The angle is left alone.
 const THROW_SPD=780,HOLD_MS=480,ORBIT_RAD=1.56;
 let orbitHi=false;
 function globeXY(){const r=G3.dom.getBoundingClientRect();return {x:(r.left+r.right)/2,y:(r.top+r.bottom)/2,R:Math.max(G3.screenRadius(),80)};}
@@ -529,13 +529,13 @@ function makeOrbit(dir,speed,sign){let x=dir.x,y=dir.y,z=dir.z,len=Math.hypot(x,
 function screenDir(x,y){const ll=G3.pick(x,y);if(ll){const la=ll[1]*Math.PI/180,lo=ll[0]*Math.PI/180;return {x:Math.cos(la)*Math.sin(lo),y:Math.sin(la),z:Math.cos(la)*Math.cos(lo)};}return G3.viewDirLocal();}
 function syncOrb(s){const d=orbDir(s),ll=dirToLonLat(d);s.lon=ll[0];s.lat=ll[1];}
 function presentOrbit(p){const s=p.space;if(!s)return;lockRad(s);syncOrb(s);
- const h=p._h||p._ang||0.05,base=s.drawS||1;let sc=base,vis=true;
+ const h=p._h||p._ang||0.05,base=s.drawS||1;let sc=base;
  const view=G3.pieceView?G3.pieceView(s.lon,s.lat,s.rad):null;s.view=view;
- if(view&&view.z<=1&&!view.occluded){let box=G3.sampleBox(s.lon,s.lat,s.rad,h,sc,p.angle||0);
-  if(pointOnUI(view.x,view.y))vis=false;
-  else if(boxHitsUI(box)){for(let i=0;i<8&&boxHitsUI(box)&&sc>.06;i++){sc=Math.max(.06,sc*.62);box=G3.sampleBox(s.lon,s.lat,s.rad,h,sc,p.angle||0);}}
-  s.box=box;}
- s.showS=sc;s.masked=!vis;
+ // Visible bounds of the whole patch, including edges that stick out while the centre is behind Earth.
+ let box=G3.sampleBox(s.lon,s.lat,s.rad,h,sc,p.angle||0);
+ if(boxHitsUI(box)){for(let i=0;i<8&&boxHitsUI(box)&&sc>.06;i++){sc=Math.max(.06,sc*.62);box=G3.sampleBox(s.lon,s.lat,s.rad,h,sc,p.angle||0);}}
+ const vis=!boxHitsUI(box);
+ s.box=box;s.showS=sc;s.masked=!vis;
  if(p.pid)G3.pc.set(p.pid,{lon:s.lon,lat:s.lat,s:sc,a:p.angle,rad:s.rad,op:1,vis,hi:orbitHi&&vis?1:0});}
 function stepOrbit(p,dt){const s=p.space;if(!s)return;
  const sign=s.angV<0?-1:1,spd=Math.max(s.mode==='orbit'?0.55:0.16,Math.abs(s.angV)||0);
