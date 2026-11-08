@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>"><title>A World Apart</title><link rel="stylesheet" href="style.css?v=coins3"><script type="importmap">{"imports":{"three":"./previews/brazil/three.module.js"}}</script></head><body>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>"><title>A World Apart</title><link rel="stylesheet" href="style.css?v=hud1"><script type="importmap">{"imports":{"three":"./previews/brazil/three.module.js"}}</script></head><body>
 <header><h1>🌍 A World Apart</h1>
 <select id="set" aria-label="Piece set">
 <option value="starter">Starter (30 big countries)</option><option value="Africa">Africa</option><option value="Asia">Asia</option>
@@ -14,10 +14,10 @@
   <div id="placeTab" hidden></div>
 </div>
 <button id="mute" title="Sound on/off">🔊</button></header>
+<div id="tube" title="Flag colours collected"><div id="tubeFill"></div></div>
 <main>
 <svg width="0" height="0" style="position:absolute"><defs><pattern id="wood" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="wood.jpg" width="1" height="1" preserveAspectRatio="none"/></pattern></defs></svg>
 <section id="tray"><h2>Puzzle box</h2><div id="pieces"></div></section>
-<div id="tube" title="Flag colours collected"><div id="tubeFill"></div></div>
 <section id="stage">
 <div id="menuW"><button id="menuB" aria-haspopup="true" aria-expanded="false">☰ Menu</button><div id="menuL" hidden><button id="credB">Credits &amp; data</button><a href="v1/">Classic version</a></div></div>
 <div id="credP" hidden><div class="cp"><button id="credX" aria-label="Close">✕</button><h3>Credits &amp; data</h3><ul>
@@ -29,7 +29,9 @@
 <li>Wood, lighting, starfield and sounds: original procedural work for this project.</li></ul></div></div>
 <div id="zoom"><button id="zin">+</button><button id="zout">−</button></div>
 <div id="msg"></div></section>
-<aside id="hints">
+<aside id="side">
+<div id="machines" hidden></div>
+<section id="hints">
 <div class="hintsHead"><h2>Hints</h2><button type="button" id="hintsToggle" aria-expanded="true" title="Show or hide hints">▾</button></div>
 <div id="hintsBody">
 <div id="sel">Tap the stack to draw a piece.</div>
@@ -38,9 +40,9 @@
 <button class="hint" id="h2">2. Clue</button>
 <button class="hint" id="h3">3. Show me where</button>
 <div id="hintText"></div>
-<p class="tip">Tap or drag the stack (bottom-left) to draw a piece, then drop it on the globe or into a drawer. Pull the faint wooden handles at the screen edges to open the drawers. Turn a piece with ⟲ ⟳, the mouse wheel, or Q / E keys. Drag the globe to spin it. Drop a piece on a top-down conveyor (right edge) for size, heading, or a Finderator meter — costs coins. Pieces pushed off float in zero-G; throw hard to orbit.</p>
+<p class="tip">Tap or drag the stack (bottom-left) to draw a piece, then drop it on the globe or into a drawer. Pull the faint wooden handles at the screen edges to open the drawers. Turn a piece with ⟲ ⟳, the mouse wheel, or Q / E keys. Drag empty ocean to spin the globe; drag the middle of a parked piece (not the anchor) to move it. Drop a piece on a conveyor in the panel above for size, heading, or a Finderator meter — costs coins. Pieces pushed off float in zero-G; throw hard to orbit.</p>
 </div>
-<div id="machines" hidden></div>
+</section>
 </aside>
 </main>
 <div id="pouchWrap" hidden>
@@ -51,4 +53,4 @@
 <div id="flagPop" hidden><img id="flagImg" alt=""></div>
 <div id="card" hidden><div class="cardIn"><h2 id="cName"></h2><ul id="cFacts"></ul><button id="cOk">OK!</button></div></div>
 <script src="lib/d3.min.js"></script><script src="lib/topojson-client.min.js"></script>
-<script src="data/flags.js"></script><script src="data/facts.js"></script><script type="module" src="globe3d.js?v=coin1"></script><script src="game.js?v=coins3"></script></body></html>
+<script src="data/flags.js"></script><script src="data/facts.js"></script><script type="module" src="globe3d.js?v=coin1"></script><script src="game.js?v=hud1"></script></body></html>
