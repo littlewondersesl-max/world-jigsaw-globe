@@ -175,7 +175,7 @@ function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
  fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
-function placeNow(f,cont){const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function placeNow(f,cont){if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
 function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;for(const c of CS)unload(c);}
 let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
 // camera
@@ -193,7 +193,7 @@ function pick(x,y){const r=R.domElement.getBoundingClientRect();mv.set((x-r.left
 function screenRadius(){const r=R.domElement.getBoundingClientRect();const d=Math.max(C.position.length(),1.5001);return (r.height/2)/Math.tan(THREE.MathUtils.degToRad(C.fov/2))*1.5/Math.sqrt(d*d-2.25)}
 function resize(){const r=host.getBoundingClientRect();C.aspect=r.width/Math.max(1,r.height);C.updateProjectionMatrix();R.setSize(r.width,r.height);}
 let grab=null;const GQ=new THREE.Quaternion(),AX=new THREE.Vector3(),RT=new THREE.Vector3(),UPV=new THREE.Vector3();
-R.domElement.addEventListener('pointerdown',e=>{const alt=C.position.length()-1.5;if(e.button!==0||alt<.06||!pick(e.clientX,e.clientY)){grab=null;return}
+R.domElement.addEventListener('pointerdown',e=>{if(window.__claimPiece&&window.__claimPiece(e)){grab=null;return}const alt=C.position.length()-1.5;if(e.button!==0||alt<.06||!pick(e.clientX,e.clientY)){grab=null;return}
  grab={x:e.clientX,y:e.clientY,id:e.pointerId};O.enabled=false;try{R.domElement.setPointerCapture(e.pointerId)}catch(_){}},{capture:true});
 addEventListener('pointermove',e=>{if(!grab||e.pointerId!==grab.id)return;const dx=e.clientX-grab.x,dy=e.clientY-grab.y;grab.x=e.clientX;grab.y=e.clientY;
  const h=R.domElement.clientHeight||800,k=1/Math.max(50,screenRadius());
@@ -215,16 +215,19 @@ function pcGeom(h,s){const N=40,pos=[],uv=[],idx=[];for(let j=0;j<=N;j++)for(let
  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,b,d,a,d,c);}
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);return g;}
 function pcAdd(id,canvas,h){pcDel(id);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;
- const m=new THREE.Mesh(pcGeom(h,1),new THREE.ShaderMaterial({uniforms:{map:{value:t},op:{value:1},sun:U.sun},transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,
+ const m=new THREE.Mesh(pcGeom(h,1),new THREE.ShaderMaterial({uniforms:{map:{value:t},op:{value:1},sun:U.sun},transparent:true,depthWrite:false,depthTest:true,polygonOffset:true,polygonOffsetFactor:-4,
  vertexShader:`varying vec2 vu;varying vec3 wn;void main(){vu=uv;wn=normalize(mat3(modelMatrix)*normalize(position));gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
  fragmentShader:`uniform sampler2D map;uniform float op;uniform vec3 sun;varying vec2 vu;varying vec3 wn;void main(){vec4 c=texture2D(map,vu);if(c.a<.02)discard;vec3 N=normalize(wn);float l=dot(N,sun);
- vec3 col=pow(c.rgb,vec3(2.2))*(.22+1.*smoothstep(-.1,.35,l))+vec3(1.,.95,.85)*pow(max(dot(N,normalize(sun+vec3(0.,0.,1.))),0.),60.)*.08*smoothstep(0.,.3,l);gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;
- const hold=new THREE.Group();hold.add(m);G.add(hold);PCS[id]={hold,m,h,s:1};}
+ vec3 col=pow(c.rgb,vec3(2.2))*(.22+1.*smoothstep(-.1,.35,l))+vec3(1.,.95,.85)*pow(max(dot(N,normalize(sun+vec3(0.,0.,1.))),0.),60.)*.08*smoothstep(0.,.3,l);gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;m.userData.pid=id;
+ const hold=new THREE.Group();hold.add(m);G.add(hold);PCS[id]={hold,m,h,s:1,rad:PR};}
 const _e=new THREE.Vector3(),_n=new THREE.Vector3(),_u=new THREE.Vector3(),_M=new THREE.Matrix4(),_Q=new THREE.Quaternion();
 function pcSet(id,o){const P=PCS[id];if(!P)return;if(o.s!=null&&Math.abs(o.s-P.s)>1e-4){P.m.geometry.dispose();P.m.geometry=pcGeom(P.h,o.s);P.s=o.s;}
  const lo=THREE.MathUtils.degToRad(o.lon);_n.copy(sv(o.lon,o.lat));_e.set(Math.cos(lo),0,-Math.sin(lo));_u.crossVectors(_n,_e);_M.makeBasis(_e,_u,_n);P.hold.quaternion.setFromRotationMatrix(_M);
+ const rad=o.rad||PR;P.hold.scale.setScalar(rad/PR);P.rad=rad;
  P.m.rotation.z=-THREE.MathUtils.degToRad(o.a||0);if(o.op!=null)P.m.material.uniforms.op.value=o.op;P.hold.visible=o.vis!==false;}
 function pcDel(id){const P=PCS[id];if(!P)return;G.remove(P.hold);P.m.geometry.dispose();P.m.material.uniforms.map.value.dispose();P.m.material.dispose();delete PCS[id];}
+function pcHas(id){return !!PCS[id];}
+function pcInfo(id){const P=PCS[id];if(!P)return null;return {vis:!!P.hold.visible,rad:P.rad||PR};}
 let OL=null;function outline(f){if(OL){G.remove(OL);OL.geometry.dispose();OL=null}if(!f)return;const pts=[];const geo=f.geometry;const polys=geo.type=='Polygon'?[geo.coordinates]:geo.coordinates;
  for(const p of polys)for(const ring of p){for(let i=0;i<ring.length-1;i++){const a=ring[i],b=ring[i+1],n=Math.max(1,Math.ceil(d3.geoDistance(a,b)/0.01));const it=d3.geoInterpolate(a,b);
   for(let k=0;k<n;k++){pts.push(sv(...it(k/n)).multiplyScalar(PR*1.001),sv(...it((k+1)/n)).multiplyScalar(PR*1.001));}}}
@@ -234,5 +237,29 @@ function offsetLon(d){G.quaternion.multiply(new THREE.Quaternion().setFromAxisAn
 function facing(lo,la){const v=sv(lo,la).multiplyScalar(1.5).applyMatrix4(G.matrixWorld);return v.clone().normalize().dot(C.position.clone().sub(v).normalize())>.05}
 function fogNow(f){const pr=eq(TW,TH),gp=d3.geoPath(pr,bctx);bctx.save();bctx.beginPath();gp(f);bctx.fillStyle='rgba(120,134,150,.92)';bctx.fill();bctx.lineWidth=Math.max(1,TW/4096);bctx.strokeStyle='rgba(225,232,240,.55)';bctx.stroke();bctx.restore();baseT.needsUpdate=true;}
 function provNow(f,cont){paint(bctx,TW,TH,f,cont);const pr=eq(TW,TH),gp=d3.geoPath(pr,bctx);bctx.save();bctx.beginPath();gp(f);bctx.lineWidth=Math.max(1,TW/5000);bctx.strokeStyle='rgba(40,30,15,.45)';bctx.stroke();bctx.restore();baseT.needsUpdate=true;}
-window.G3={fog:fogNow,provNow,pc:{add:pcAdd,set:pcSet,del:pcDel},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),setQuat:q=>{G.quaternion.fromArray(q);G.updateMatrixWorld();},cam:()=>({p:C.position.toArray(),t:O.target.toArray()}),setCam:c=>{C.position.fromArray(c.p);O.target.fromArray(c.t);O.update();},project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},C,O};
+function occludedWorld(world){const O=C.position,d=world.clone().sub(O),dist=d.length();if(dist<1e-4)return false;d.multiplyScalar(1/dist);
+ const b=O.dot(d),c0=O.lengthSq()-1.52*1.52,disc=b*b-c0;if(disc<0)return false;const tN=-b-Math.sqrt(disc);return tN>0.02&&tN<dist-0.03;}
+function projectWorld(world){const p=world.clone().project(C),r=R.domElement.getBoundingClientRect();return {x:r.left+(p.x+1)/2*r.width,y:r.top+(1-p.y)/2*r.height,z:p.z,occluded:occludedWorld(world)};}
+function sampleBox(lon,lat,rad,h,drawS,angle){G.updateMatrixWorld(true);const n=sv(lon,lat),lo=THREE.MathUtils.degToRad(lon),e=new THREE.Vector3(Math.cos(lo),0,-Math.sin(lo)),north=new THREE.Vector3().crossVectors(n,e);
+ const th=-THREE.MathUtils.degToRad(angle||0),ca=Math.cos(th),sa=Math.sin(th),sc=drawS==null?1:drawS,hh=h||0.05;
+ const uv=[[0,0],[hh,hh],[hh,-hh],[-hh,hh],[-hh,-hh],[hh,0],[-hh,0],[0,hh],[0,-hh],[hh*.5,hh*.5],[-hh*.5,hh*.5],[hh*.5,-hh*.5],[-hh*.5,-hh*.5]];
+ let any=false,minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;const pts=[];
+ for(const [u0,v0] of uv){const u=u0*ca-v0*sa,v=u0*sa+v0*ca,r=Math.hypot(u,v);
+  let ang=Math.asin(Math.min(1,r))*sc;ang=Math.min(ang,Math.PI*.98);const k=r>1e-9?Math.sin(ang)/r:sc;
+  const dir=n.clone().multiplyScalar(Math.cos(ang)).addScaledVector(e,u*k).addScaledVector(north,v*k).normalize();
+  const pr=projectWorld(dir.multiplyScalar(rad).applyMatrix4(G.matrixWorld));
+  pts.push({x:pr.x,y:pr.y,occluded:pr.occluded||pr.z>1,u:u0,v:v0});
+  if(pr.occluded||pr.z>1)continue;any=true;if(pr.x<minX)minX=pr.x;if(pr.x>maxX)maxX=pr.x;if(pr.y<minY)minY=pr.y;if(pr.y>maxY)maxY=pr.y;}
+ return {anyVis:any,minX,minY,maxX,maxY,pts};}
+function alphaAt(mesh,uv){const img=mesh.material&&mesh.material.uniforms&&mesh.material.uniforms.map&&mesh.material.uniforms.map.value&&mesh.material.uniforms.map.value.image;
+ if(!img||!uv||!img.width)return 255;const ctx=img.getContext&&img.getContext('2d');if(!ctx)return 255;
+ const px=Math.max(0,Math.min(img.width-1,uv.x*img.width|0)),py=Math.max(0,Math.min(img.height-1,(1-uv.y)*img.height|0));
+ try{return ctx.getImageData(px,py,1,1).data[3];}catch(e){return 255;}}
+function pickPiece(x,y){G.updateMatrixWorld(true);const r=R.domElement.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);rc.setFromCamera(mv,C);
+ const hits=rc.intersectObjects(Object.values(PCS).map(P=>P.m),false).sort((a,b)=>a.distance-b.distance);
+ for(const h of hits){const sp=new THREE.Vector3();if(rc.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(),1.52),sp)&&sp.distanceTo(C.position)<h.distance-0.02)continue;
+  if(alphaAt(h.object,h.uv)<16)continue;return h.object.userData.pid||null;}
+ return null;}
+function viewDirLocal(){const w=C.position.clone().normalize().applyQuaternion(G.quaternion.clone().invert());return {x:w.x,y:w.y,z:w.z};}
+window.G3={fog:fogNow,provNow,pc:{add:pcAdd,set:pcSet,del:pcDel,has:pcHas,info:pcInfo},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),setQuat:q=>{G.quaternion.fromArray(q);G.updateMatrixWorld();},cam:()=>({p:C.position.toArray(),t:O.target.toArray()}),setCam:c=>{C.position.fromArray(c.p);O.target.fromArray(c.t);O.update();},project,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},sampleBox,pickPiece,viewDirLocal,C,O};
 window.dispatchEvent(new Event('g3ready'));

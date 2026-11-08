@@ -187,3 +187,37 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #placeTab .ptHint{font:10px/1 system-ui,sans-serif;opacity:.5;margin-top:4px}
 #card{cursor:default}
 #card .cardIn{cursor:default;max-height:min(80vh,560px);overflow:auto}
+
+/* ---- layout: horizontal colour bar, right conveyor HUD, bottom continent board ---- */
+#tubeBar{display:flex;align-items:center;gap:8px;padding:3px 12px 4px;background:#0f1a2c;position:relative;z-index:40;flex:none}
+#tube{width:auto;flex:1;height:14px;margin:0;border-radius:8px;border-width:2px}
+#tubeFill{position:absolute;inset:0;display:flex;flex-direction:row;align-items:stretch}
+.stripe{width:auto;height:100%;flex:none}
+#hudCol{width:228px;flex:none;display:flex;flex-direction:column;min-height:0;min-width:0;background:#122238;position:relative;z-index:15}
+#hudCol #machines{position:relative;right:auto;top:auto;bottom:auto;width:auto;height:auto;z-index:2;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:6px;padding:8px 8px 4px;pointer-events:none;overflow:auto;flex:none;max-height:58%}
+#hudCol #hints{width:auto;flex:1;min-height:0;background:transparent}
+#hudCol #machines .mach{width:100%;height:auto;aspect-ratio:600/318;margin:0;transform:none;filter:none;pointer-events:auto}
+#hudCol #machines .mach.near,#hudCol #machines .mach.over{transform:none;filter:drop-shadow(0 0 8px #f6d27a88)}
+#hudCol #machines .machImg{object-fit:fill;object-position:center;z-index:1}
+.beltWin{position:absolute;overflow:hidden;z-index:3;pointer-events:none}
+.beltScroll{position:absolute;inset:0;background-repeat:repeat-x;background-position:0 50%;background-size:auto 100%;pointer-events:none}
+#hudCol #machines .inBelt{left:auto;top:auto;height:auto;width:auto;z-index:4;transform:none;border-radius:0;background:none;box-shadow:none;overflow:visible}
+#hudCol #machines .inBelt::before{content:none;display:none;animation:none}
+#hudCol #machines .mach.near .inBelt,#hudCol #machines .mach.over .inBelt,#hudCol #machines .mach.busy .inBelt,#hudCol #machines .mach.pushing .inBelt{width:auto}
+#pouchWrap{left:12px;top:calc(var(--chromeTop, 64px) + 8px)}
+#zoom{left:14px!important;right:auto!important;bottom:calc(var(--boardOpen, 0px) + 96px)}
+#scr{right:8px!important;bottom:calc(var(--boardOpen, 0px) + 16px)}
+.drawer.dR{top:auto;bottom:0;left:var(--boardLeft, 132px);width:var(--boardW, calc(100vw - 360px));height:var(--boardH, 168px);transform:translateY(100%);z-index:14}
+.dR .dh{left:50%;right:auto;top:-16px;bottom:auto;width:92px;height:14px;margin:0 0 0 -46px;border-radius:8px 8px 3px 3px;cursor:ns-resize}
+.dR .din{border-left:0;border-top:8px solid #8a6a42}
+.dR .sec{overflow:hidden}
+.dR .sec .carve{color:#2a160c;background:#fff6e4ee;text-shadow:none;font:800 12px/1.15 system-ui,sans-serif;letter-spacing:0;top:4px;left:4px;right:4px;padding:3px 4px;border-radius:5px;white-space:normal;text-align:center;z-index:6}
+.dp .dname{position:absolute;left:50%;bottom:1px;transform:translateX(-50%);max-width:74px;padding:1px 4px;border-radius:4px;background:#fff8eef2;color:#1c120a;font:700 10px/1.15 system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;z-index:3;box-shadow:0 1px 2px #0006}
+@media(max-width:800px){
+ main{flex-direction:row}
+ #hudCol{width:132px}
+ #hints{width:auto;max-height:none;height:auto}
+ #tube,#tubeBar{position:relative;right:auto;top:auto;bottom:auto;width:auto;height:auto}
+ #tube{height:12px}
+ .tip{display:none}
+}
