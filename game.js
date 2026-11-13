@@ -46,7 +46,7 @@ let SAIM=null,BRIM=null,SAD=null,BRD=null;
 const hqReady=Promise.all([wtReady,loadIm('previews/south-america/c3.jpg'),loadIm('previews/brazil/c3.jpg')]).then(([,sa,br])=>{SAIM=sa;BRIM=br;
  const grab=(im)=>{if(!im)return null;const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');x.drawImage(im,0,0);return {w:c.width,h:c.height,d:x.getImageData(0,0,c.width,c.height).data};};
  SAD=grab(SAIM);BRD=grab(BRIM);});
-function isAmericas(n){return /America/.test((FACTS[n]||[''])[0]);}
+function hiRes(n){return /America|Europe|Africa/.test((FACTS[n]||[''])[0]);}
 function sampleBilinear(src,u,v){const w=src.w,h=src.h,d=src.d;const x=Math.min(w-1.001,Math.max(0,u*(w-1))),y=Math.min(h-1.001,Math.max(0,v*(h-1)));
  const x0=x|0,y0=y|0,x1=Math.min(w-1,x0+1),y1=Math.min(h-1,y0+1),tx=x-x0,ty=y-y0;
  const at=(X,Y)=>{const i=(Y*w+X)*4;return [d[i],d[i+1],d[i+2]];};
@@ -56,14 +56,14 @@ function faceSource(f){if(f.name==='Brazil'&&BRD)return {src:BRD,lon0:-74.5,lon1
  if(SAD&&f.c&&f.c[0]>-81&&f.c[0]<-35&&f.c[1]>-55&&f.c[1]<12)return {src:SAD,lon0:-82,lon1:-34,lat0:-56,lat1:13};
  if(WT.d)return {src:WT,equirect:true};return null;}
 function face(f){if(f._face)return f._face;const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(1).translate([0,0]).clipAngle(90),b=d3.geoPath(pr).bounds(f);
- const bw=b[1][0]-b[0][0],bh=b[1][1]-b[0][1],FS=isAmericas(f.name)?1024:192,k=FS/Math.max(bw,bh),cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
+ const bw=b[1][0]-b[0][0],bh=b[1][1]-b[0][1],FS=hiRes(f.name)?1024:192,k=FS/Math.max(bw,bh),cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
  const c=document.createElement('canvas');c.width=cw;c.height=ch;const x=c.getContext('2d'),id=x.createImageData(cw,ch),o=id.data;const src=faceSource(f);
  if(src){const l0=f.c[0]*Math.PI/180,p0=f.c[1]*Math.PI/180,sp=Math.sin(p0),cp=Math.cos(p0);
   for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const X=b[0][0]+(i+.5)/k,Y=-(b[0][1]+(j+.5)/k),rr=X*X+Y*Y;if(rr>=1)continue;const z=Math.sqrt(1-rr);
    const lat=Math.asin(z*sp+Y*cp),lon=l0+Math.atan2(X,z*cp-Y*sp);const la=lat*180/Math.PI,lo=lon*180/Math.PI;
    let u,v;if(src.equirect){u=((lo+180)/360%1+1)%1;v=(90-la)/180;}else{u=(lo-src.lon0)/(src.lon1-src.lon0);v=(src.lat1-la)/(src.lat1-src.lat0);if(u<0||u>1||v<0||v>1)continue;}
    const rgb=sampleBilinear(src.src,u,v),t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}}
- x.putImageData(id,0,0);return f._face={url:c.toDataURL('image/jpeg',isAmericas(f.name)?.9:.86),b,px:Math.max(cw,ch)};}
+ x.putImageData(id,0,0);return f._face={url:c.toDataURL('image/jpeg',hiRes(f.name)?.9:.86),b,px:Math.max(cw,ch)};}
 let svgN=0;
 function shapeSVG(f,scale,cls){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(scale).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
  const b=gp.bounds(f),m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],1);
@@ -84,9 +84,14 @@ function buildSet(){if(carrying)dispatchEvent(new KeyboardEvent('keydown',{key:'
  placed.clear();G3.clear();provReset();for(const q of [...parked])unpark(q);anc=null;aui.innerHTML='';aui._h=null;hdl.style.display='none';G3.outline(null);pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;$('tubeFill').innerHTML='';renderTray();updHints();progress();draw();}
 function cols(n){return (FLAGS[n]||[0,['#cccccc']])[1];}
-function renderTray(){const box=$('pieces');box.innerHTML='';for(const p of pieces){if(placed.has(p.f.name)||p.parked)continue;const d=document.createElement('div');d.className='piece'+(p===sel?' sel':'');d.dataset.name=p.f.name;
- const s=trayScale(p.f);d.innerHTML=shapeSVG(p.f,s).svg;const sv=d.firstChild;sv.setAttribute('width',86);sv.setAttribute('height',86);sv.style.transform=`rotate(${p.angle}deg)`;
- d.addEventListener('pointerdown',e=>startDrag(e,p,d));box.appendChild(d);p.el=d;}}
+let trayJob=0;
+function renderTray(){const box=$('pieces');box.innerHTML='';const list=pieces.filter(p=>!placed.has(p.f.name)&&!p.parked);const job=++trayJob;let i=0;
+ const step=()=>{if(job!==trayJob)return;const t0=performance.now();
+  while(i<list.length&&performance.now()-t0<10){const p=list[i++];const d=document.createElement('div');d.className='piece'+(p===sel?' sel':'');d.dataset.name=p.f.name;
+   const s=trayScale(p.f);d.innerHTML=shapeSVG(p.f,s).svg;const sv=d.firstChild;sv.setAttribute('width',86);sv.setAttribute('height',86);sv.style.transform=`rotate(${p.angle}deg)`;
+   d.addEventListener('pointerdown',e=>startDrag(e,p,d));box.appendChild(d);p.el=d;}
+  if(i<list.length)requestAnimationFrame(step);};
+ step();}
 function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.parked&&!(anc&&anc.p===p)&&!placed.has(p.f.name)){clearTimeout(setAngle.j);setAngle.j=setTimeout(()=>{if(p.parked&&!placed.has(p.f.name)&&fits(p,[p.lon,p.lat]))revealPlaced(p);},350);}// a correct turn can still snap a parked piece in, without taking rotate away afterwards
 if(p.ov)p.ov.firstChild.style.transform=`rotate(${p.angle}deg)`;if(anc&&anc.p===p&&anc.step==='rot'){clearTimeout(setAngle.t);setAngle.t=setTimeout(checkAnc,250);}if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;}
 function select(p){sel=p;document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();}
@@ -285,9 +290,15 @@ function setMode(m){MODE=m;const g=m==='prov'?GEOP:GEO110;feats=g.feats;byName=g
   const b=d3.geoBounds(f);f.rad=Math.max(d3.geoDistance(f.c,b[0]),d3.geoDistance(f.c,b[1]))/1.6;if(n=="Antarctica"){f.c=[0,-90];f.rad=.5;}feats.push(f);byName[n]=f;}
  for(const n in groups){const s=new Set();groups[n].forEach(i=>nb[i].forEach(j=>{const m=merge[geoms[j].properties.name]||geoms[j].properties.name;if(m!=n)s.add(m)}));neigh[n]=[...s];}
  GEO110={feats,byName,neigh};
- const sharpenAmericas=fetch('data/americas-50m.json').then(r=>r.json()).then(am=>{for(const feat of am.features){const cur=byName[feat.properties.name];if(!cur)continue;cur.geometry=feat.geometry;cur._face=null;
-  const b=d3.geoBounds(cur);cur.rad=Math.max(d3.geoDistance(cur.c,b[0]),d3.geoDistance(cur.c,b[1]))/1.6;}}).catch(()=>{});
- Promise.all([hqReady,sharpenAmericas]).then(()=>{buildSet();window.__ready=true;dispatchEvent(new Event('gameready'));});});
+ const NEW_NEIGH={"Andorra":["France","Spain"],"Vatican":["Italy"],"San Marino":["Italy"],"Monaco":["France"],"Liechtenstein":["Switzerland","Austria"]};
+ function applyCoasts(fc){for(const feat of fc.features){const n=feat.properties.name;let cur=byName[n];
+  if(!cur){if(!FACTS[n])continue;cur=fixC({type:'Feature',geometry:feat.geometry,name:n},n);feats.push(cur);byName[n]=cur;neigh[n]=NEW_NEIGH[n]||[];continue;}
+  cur.geometry=feat.geometry;cur._face=null;const b=d3.geoBounds(cur);cur.rad=Math.max(d3.geoDistance(cur.c,b[0]),d3.geoDistance(cur.c,b[1]))/1.6;}}
+ const sharpenCoasts=Promise.all([
+  fetch('data/americas-50m.json').then(r=>r.json()).then(applyCoasts),
+  fetch('data/europe-africa-hd.json').then(r=>r.json()).then(applyCoasts)
+ ]).catch(()=>{});
+ Promise.all([hqReady,sharpenCoasts]).then(()=>{buildSet();window.__ready=true;dispatchEvent(new Event('gameready'));});});
 window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={park:(n,lon,lat,s,a)=>{const q=pieces.find(q=>q.f.name==n);q.angle=a||0;park(q,[lon,lat],s||1)},unpark:n=>unpark(pieces.find(q=>q.f.name==n)),get anc(){return anc},get parked(){return parked},get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
 // ---- placed-countries screen: one borderless translucent panel, stacked thin tabs, pointer line to the country ----
 var scr=document.createElement('div');scr.id='scr';scr.innerHTML='<div class="sh">Placed</div><div id="scrL"></div>';$('stage').appendChild(scr);
@@ -453,8 +464,15 @@ $('orbitHi').addEventListener('click',()=>{if(!orbiters().length)return;orbitHi=
 $('orbitBack').addEventListener('click',()=>{if(!orbiters().length)return;recallOrbiters();});
 function drawStack(){const L=pieces.filter(p=>p.dloc==='L');stk.innerHTML=L.slice(0,4).map((p,i)=>`<div class="sp" style="transform:translate(${i*2}px,${-i*3}px) rotate(${(i*37)%20-10}deg)">${shapeSVG(p.f,trayScale(p.f)*.6).svg}</div>`).join('')+`<b>${L.length}</b>`;stk.classList.toggle('empty',!L.length);}
 stk.addEventListener('pointerdown',e=>{e.preventDefault();const L=pieces.filter(p=>p.dloc==='L');if(!L.length)return;stk.animate([{transform:'scale(1)'},{transform:'scale(.86,.8)'},{transform:'scale(1)'}],{duration:220});knock(.12,300);carry(L[0],e,stk);});
-function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p))remBody(b.p);for(const p of pieces){const gone=placed.has(p.f.name)||p.parked||p.space||p.onBelt;if((placed.has(p.f.name)||p.parked||p.space||p.onBelt)&&p.body)remBody(p);
-  else if(!gone&&!p.body&&carrying!==p)addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),false);}drawStack();}
+let syncJob=0;
+function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p))remBody(b.p);
+ const todo=[];for(const p of pieces){const gone=placed.has(p.f.name)||p.parked||p.space||p.onBelt;if(gone&&p.body)remBody(p);else if(!gone&&!p.body&&carrying!==p)todo.push(p);}
+ const job=++syncJob;let i=0;
+ const step=()=>{if(job!==syncJob||!pieces)return;let budget=8;const t0=performance.now();
+  while(i<todo.length&&budget>0&&performance.now()-t0<14){const p=todo[i++];if(p.body||carrying===p||placed.has(p.f.name)||p.parked||p.space||p.onBelt)continue;
+   const fresh=hiRes(p.f.name)&&!p.f._face;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),false);budget-=fresh?6:1;}
+  drawStack();if(i<todo.length)requestAnimationFrame(step);};
+ step();}
 const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')syncDrawers();};
 addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
 syncDrawers();kick();

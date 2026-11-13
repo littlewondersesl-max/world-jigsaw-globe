@@ -208,10 +208,15 @@ let queue=Promise.resolve();
 // North, Central America and the Caribbean use the same kind of masked terrain mesh as Brazil.
 // South America already has the continent look-3 patch. These meshes are built on first placement.
 const AM=new Map();
-function amBBox(f){let x0=180,x1=-180,y0=90,y1=-90;const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
+function ringMid(ring){let x=0,y=0;for(const p of ring){x+=p[0];y+=p[1];}return [x/Math.max(1,ring.length),y/Math.max(1,ring.length)];}
+function gcDeg(a,b){const dLa=(b[1]-a[1])*Math.PI/180,dLo=(b[0]-a[0])*Math.PI/180,la1=a[1]*Math.PI/180,la2=b[1]*Math.PI/180;
+ const h=Math.sin(dLa/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLo/2)**2;return 2*Math.asin(Math.min(1,Math.sqrt(h)))*180/Math.PI;}
+function amPolys(f,near){const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;if(!near||!f.c)return polys;
+ const keep=polys.filter(poly=>poly[0]&&poly[0].length>2&&gcDeg(f.c,ringMid(poly[0]))<55);return keep.length?keep:polys;}
+function amBBox(polys){let x0=180,x1=-180,y0=90,y1=-90;
  for(const poly of polys)for(const ring of poly)for(const p of ring){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1];}
  const pad=Math.max(.2,Math.max(x1-x0,y1-y0)*.06);return [x0-pad,y0-pad,x1+pad,y1+pad];}
-function amCanvas(f,box){const [x0,y0,x1,y1]=box;const span=Math.max(x1-x0,y1-y0);
+function amCanvas(polys,box){const [x0,y0,x1,y1]=box;const span=Math.max(x1-x0,y1-y0);
  const maxPx=span>30?1024:span>8?768:512;const aspect=(x1-x0)/Math.max(.2,y1-y0);
  let w=maxPx,h=maxPx;if(aspect>=1)h=Math.max(64,Math.round(maxPx/aspect));else w=Math.max(64,Math.round(maxPx*aspect));
  const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');
@@ -220,10 +225,14 @@ function amCanvas(f,box){const [x0,y0,x1,y1]=box;const span=Math.max(x1-x0,y1-y0
   ctx.drawImage(WTI,sx,sy,Math.max(1,sw),Math.max(1,sh),0,0,w,h);}
  else {ctx.fillStyle='#6f8f55';ctx.fillRect(0,0,w,h);}
  ctx.globalCompositeOperation='destination-in';ctx.beginPath();
- const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
  for(const poly of polys){const ring=poly[0];if(!ring||ring.length<3)continue;ring.forEach((p,i)=>{const px=(p[0]-x0)/(x1-x0)*w,py=(y1-p[1])/(y1-y0)*h;if(i)ctx.lineTo(px,py);else ctx.moveTo(px,py);});ctx.closePath();}
  ctx.fill();ctx.globalCompositeOperation='source-over';return c;}
-function amMake(f){const box=amBBox(f),canvas=amCanvas(f,box);const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;tex.needsUpdate=true;
+function unwrapRing(ring){if(!ring.length)return ring;const out=[[ring[0][0],ring[0][1]]];
+ for(let i=1;i<ring.length;i++){let lon=ring[i][0];const prev=out[i-1][0];while(lon-prev>180)lon-=360;while(prev-lon>180)lon+=360;out.push([lon,ring[i][1]]);}return out;}
+function unwrapPolys(polys,refLon){return polys.map(poly=>poly.map(unwrapRing)).map(poly=>{const mid=ringMid(poly[0]);let shift=0;
+ while(mid[0]+shift-refLon>180)shift-=360;while(refLon-(mid[0]+shift)>180)shift+=360;if(!shift)return poly;return poly.map(ring=>ring.map(([x,y])=>[x+shift,y]));});}
+function amMake(f,near){let polys=amPolys(f,near);const raw=amBBox(polys);if(raw[2]-raw[0]>180)polys=unwrapPolys(polys,f.c?f.c[0]:0);
+ const box=amBBox(polys),canvas=amCanvas(polys,box);const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;tex.needsUpdate=true;
  const [x0,y0,x1,y1]=box,span=Math.max(x1-x0,y1-y0),N=Math.max(36,Math.min(96,Math.round(span*3)));
  const pos=[],uv=[],idx=[];
  for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const u=i/N,v=j/N,lon=x0+(x1-x0)*u,lat=y1-(y1-y0)*v;
@@ -236,11 +245,12 @@ function amMake(f){const box=amBBox(f),canvas=amCanvas(f,box);const tex=new THRE
    void main(){vec4 m=texture2D(map,vu);if(m.a<.15)discard;vec3 mp=pow(m.rgb,vec3(2.2));float l=dot(normalize(wn),sun);
    vec3 col=mp*(.22+1.*smoothstep(-.1,.35,l));gl_FragColor=vec4(pow(col,vec3(1./2.2)),m.a*fade);}`});
  const mesh=new THREE.Mesh(g,mat);mesh.frustumCulled=false;mesh.renderOrder=2;mesh.visible=false;G.add(mesh);return {mesh,fade,tex,g};}
-function amShow(f){let M=AM.get(f.name);if(!M){M=amMake(f);AM.set(f.name,M);}M.mesh.visible=true;M.fade.value=1;return M;}
+function amShow(f,near){let M=AM.get(f.name);if(!M){M=amMake(f,!!near);AM.set(f.name,M);}M.mesh.visible=true;M.fade.value=1;return M;}
 function amClear(){for(const M of AM.values())M.mesh.visible=false;}
-// Close-up terrain for every Americas country. Sentinel-2 cloudless tiles (Copernicus, CC BY 4.0, processed by EOX)
+// Close-up terrain for the Americas, Europe and Africa. Sentinel-2 cloudless tiles (Copernicus, CC BY 4.0, processed by EOX)
 // are fetched only for the patch in front of the camera, and only once the view is close enough to need them.
-let hdClose=false;function markHd(f,cont){if(f&&(f.name==='Brazil'||/America/.test(cont||'')))hdClose=true;}
+let hdClose=false;function hdRegion(cont){return /America|Europe|Africa/.test(cont||'');}
+function markHd(f,cont){if(f&&(f.name==='Brazil'||hdRegion(cont)))hdClose=true;}
 const TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/';
 const TILE_N=5,TILE_PX=TILE_N*256;
 const tileCache=new Map();const tileCanvas=document.createElement('canvas');tileCanvas.width=tileCanvas.height=TILE_PX;
@@ -280,10 +290,10 @@ function tileUpdate(alt){const dist=C.position.length();if(!hdClose||alt>.22||di
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
  const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
- if(/America/.test(cont||'')){const M=amShow(f);if(M){M.fade.value=0;await anim(700,x=>M.fade.value=ease(x));}return}
+ if(hdRegion(cont)){const M=amShow(f,/Europe|Africa/.test(cont||''));if(M){M.fade.value=0;await anim(700,x=>M.fade.value=ease(x));}return}
  fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
-function placeNow(f,cont){markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(/America/.test(cont||'')){amShow(f);return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function placeNow(f,cont){markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(hdRegion(cont)){amShow(f,/Europe|Africa/.test(cont||''));return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
 function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;hdClose=false;PU.rv.value=0;amClear();if(tileMesh)tileMesh.visible=false;for(const c of CS)unload(c);}
 let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
 // camera

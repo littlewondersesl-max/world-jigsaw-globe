@@ -174,5 +174,16 @@ window.FACTS={
 "Montenegro":["Europe","Podgorica","Mountains by the sea","Brown bear","Njeguški pršut (ham)","A small country on the Adriatic Sea."],
 "Kosovo":["Europe","Pristina","Mountains","Eagle","Flija (layer pancake)","A small country in the Balkans."],
 "Trinidad and Tobago":["North America","Port of Spain","The steel drum and carnival","Scarlet ibis","Doubles","Two islands near Venezuela."],
-"S. Sudan":["Africa","Juba","The newest country (2011)","Elephant","Kisra (flatbread)","In East Africa, south of Sudan."]
+"S. Sudan":["Africa","Juba","The newest country (2011)","Elephant","Kisra (flatbread)","In East Africa, south of Sudan."],
+"Malta":["Europe","Valletta","Old stone cities and knights","Mediterranean monk seal","Pastizzi (pea pastries)","A small island country in the Mediterranean Sea, south of Italy."],
+"Andorra":["Europe","Andorra la Vella","Ski mountains between two big countries","Chamois","Escudella (stew)","A tiny country in the Pyrenees mountains, between France and Spain."],
+"Vatican":["Europe","Vatican City","St. Peter's Basilica","Dove","Thin-crust pizza","The smallest country in the world, inside the city of Rome."],
+"San Marino":["Europe","San Marino","One of the world's oldest countries","Tortoise","Piadina (flatbread)","A tiny country on a mountain, surrounded by Italy."],
+"Monaco":["Europe","Monaco","A famous car race through the streets","Falcon","Barbagiuan (pastry)","A tiny country on the Mediterranean coast, next to France."],
+"Liechtenstein":["Europe","Vaduz","A castle on a rock","Ibex","Käsknöpfle (cheese noodles)","A tiny country in the Alps, between Switzerland and Austria."],
+"Cabo Verde":["Africa","Praia","Volcanic islands in the Atlantic","Loggerhead turtle","Cachupa (stew)","Islands in the Atlantic Ocean, west of Africa. Also called Cape Verde."],
+"Comoros":["Africa","Moroni","Islands that grow perfume flowers","Coelacanth (old fish)","Langouste (lobster)","Small islands in the Indian Ocean, between Africa and Madagascar."],
+"São Tomé and Principe":["Africa","São Tomé","Cocoa islands on the equator","Sea turtle","Calulu (fish stew)","Two small islands in the Atlantic, off the west coast of Africa."],
+"Seychelles":["Africa","Victoria","Giant tortoises and pale beaches","Aldabra giant tortoise","Grilled fish","Islands in the Indian Ocean, north-east of Madagascar."],
+"Mauritius":["Africa","Port Louis","The dodo once lived here","Pink pigeon","Dholl puri (flatbread)","An island in the Indian Ocean, east of Madagascar."]
 };
