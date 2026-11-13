@@ -46,7 +46,7 @@ let SAIM=null,BRIM=null,SAD=null,BRD=null;
 const hqReady=Promise.all([wtReady,loadIm('previews/south-america/c3.jpg'),loadIm('previews/brazil/c3.jpg')]).then(([,sa,br])=>{SAIM=sa;BRIM=br;
  const grab=(im)=>{if(!im)return null;const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');x.drawImage(im,0,0);return {w:c.width,h:c.height,d:x.getImageData(0,0,c.width,c.height).data};};
  SAD=grab(SAIM);BRD=grab(BRIM);});
-function hiRes(n){return /America|Europe|Africa/.test((FACTS[n]||[''])[0]);}
+function hiRes(){return true;}
 function sampleBilinear(src,u,v){const w=src.w,h=src.h,d=src.d;const x=Math.min(w-1.001,Math.max(0,u*(w-1))),y=Math.min(h-1.001,Math.max(0,v*(h-1)));
  const x0=x|0,y0=y|0,x1=Math.min(w-1,x0+1),y1=Math.min(h-1,y0+1),tx=x-x0,ty=y-y0;
  const at=(X,Y)=>{const i=(Y*w+X)*4;return [d[i],d[i+1],d[i+2]];};
@@ -290,13 +290,14 @@ function setMode(m){MODE=m;const g=m==='prov'?GEOP:GEO110;feats=g.feats;byName=g
   const b=d3.geoBounds(f);f.rad=Math.max(d3.geoDistance(f.c,b[0]),d3.geoDistance(f.c,b[1]))/1.6;if(n=="Antarctica"){f.c=[0,-90];f.rad=.5;}feats.push(f);byName[n]=f;}
  for(const n in groups){const s=new Set();groups[n].forEach(i=>nb[i].forEach(j=>{const m=merge[geoms[j].properties.name]||geoms[j].properties.name;if(m!=n)s.add(m)}));neigh[n]=[...s];}
  GEO110={feats,byName,neigh};
- const NEW_NEIGH={"Andorra":["France","Spain"],"Vatican":["Italy"],"San Marino":["Italy"],"Monaco":["France"],"Liechtenstein":["Switzerland","Austria"]};
+ const NEW_NEIGH={"Andorra":["France","Spain"],"Vatican":["Italy"],"San Marino":["Italy"],"Monaco":["France"],"Liechtenstein":["Switzerland","Austria"],"Singapore":["Malaysia"],"Bahrain":["Saudi Arabia"]};
  function applyCoasts(fc){for(const feat of fc.features){const n=feat.properties.name;let cur=byName[n];
   if(!cur){if(!FACTS[n])continue;cur=fixC({type:'Feature',geometry:feat.geometry,name:n},n);feats.push(cur);byName[n]=cur;neigh[n]=NEW_NEIGH[n]||[];continue;}
   cur.geometry=feat.geometry;cur._face=null;const b=d3.geoBounds(cur);cur.rad=Math.max(d3.geoDistance(cur.c,b[0]),d3.geoDistance(cur.c,b[1]))/1.6;}}
  const sharpenCoasts=Promise.all([
   fetch('data/americas-50m.json').then(r=>r.json()).then(applyCoasts),
-  fetch('data/europe-africa-hd.json').then(r=>r.json()).then(applyCoasts)
+  fetch('data/europe-africa-hd.json').then(r=>r.json()).then(applyCoasts),
+  fetch('data/rest-of-world-hd.json').then(r=>r.json()).then(applyCoasts)
  ]).catch(()=>{});
  Promise.all([hqReady,sharpenCoasts]).then(()=>{buildSet();window.__ready=true;dispatchEvent(new Event('gameready'));});});
 window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={park:(n,lon,lat,s,a)=>{const q=pieces.find(q=>q.f.name==n);q.angle=a||0;park(q,[lon,lat],s||1)},unpark:n=>unpark(pieces.find(q=>q.f.name==n)),get anc(){return anc},get parked(){return parked},get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
@@ -357,7 +358,6 @@ function secRects(){const B=boardBox(),cw=B.w/B.cols,rh=B.h/B.rows;return CONTS.
 function layoutSecs(){layoutChrome();const R=secRects();[...DR.R.in.querySelectorAll('.sec')].forEach((s,i)=>{const r=R[i];Object.assign(s.style,{left:r.x+'px',top:r.y+'px',width:r.w+'px',height:r.h+'px'})});}
 function bounds(o,b){const W=innerWidth,H=innerHeight;if(o.side==='L')return {x:10,y:10,w:W-20,h:H-56};const r=secRects().find(r=>r.c===b.sec)||secRects()[0];return {x:r.x+6,y:r.y+38,w:r.w-12,h:Math.max(28,r.h-56)};}
 function pieceEl(p){const e=document.createElement('div');e.className='dp';const g=shapeSVG(p.f,trayScale(p.f)*PS/86);e.innerHTML=g.svg;const sv=e.firstChild;sv.setAttribute('width',PS);sv.setAttribute('height',PS);sv.style.transform=`rotate(${p.angle}deg)`;
- const nm=document.createElement('span');nm.className='dname';nm.textContent=p.f.name;nm.title=p.f.name;e.appendChild(nm);
  e.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();carry(p,ev,e);});return e;}
 function addBody(side,p,x,y,hop,sec){remBody(p);const o=DR[side],b={p,x,y,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,z:hop?28:0,vz:0,r:PS*.36,sec:side==='R'?(sec||contOf(p.f.name)):null};
  b.el=pieceEl(p);o.in.appendChild(b.el);o.bodies.push(b);p.dloc=side;p.body=b;clampB(o,b);kick();return b;}

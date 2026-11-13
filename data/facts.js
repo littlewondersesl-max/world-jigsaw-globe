@@ -185,5 +185,16 @@ window.FACTS={
 "Comoros":["Africa","Moroni","Islands that grow perfume flowers","Coelacanth (old fish)","Langouste (lobster)","Small islands in the Indian Ocean, between Africa and Madagascar."],
 "São Tomé and Principe":["Africa","São Tomé","Cocoa islands on the equator","Sea turtle","Calulu (fish stew)","Two small islands in the Atlantic, off the west coast of Africa."],
 "Seychelles":["Africa","Victoria","Giant tortoises and pale beaches","Aldabra giant tortoise","Grilled fish","Islands in the Indian Ocean, north-east of Madagascar."],
-"Mauritius":["Africa","Port Louis","The dodo once lived here","Pink pigeon","Dholl puri (flatbread)","An island in the Indian Ocean, east of Madagascar."]
+"Mauritius":["Africa","Port Louis","The dodo once lived here","Pink pigeon","Dholl puri (flatbread)","An island in the Indian Ocean, east of Madagascar."],
+"Singapore":["Asia","Singapore","A city that is a whole country","Merlion","Chilli crab","A tiny island country at the southern tip of Malaysia."],
+"Maldives":["Asia","Malé","Islands made of coral","Whale shark","Garudhiya (fish soup)","A long line of tiny islands in the Indian Ocean, south-west of India."],
+"Bahrain":["Asia","Manama","An island kingdom in the Persian Gulf","Arabian oryx","Machboos (spiced rice)","A small island country in the Persian Gulf, near Saudi Arabia."],
+"Tonga":["Oceania","Nukuʻalofa","The first place to see each new day","Flying fox","Lu pulu (corned beef and coconut)","Islands in the South Pacific, east of Fiji."],
+"Samoa":["Oceania","Apia","Fiafia dancing and green islands","Flying fox","Palusami (taro and coconut)","Islands in the South Pacific, north-east of Fiji."],
+"Kiribati":["Oceania","Tarawa","Islands spread across a huge ocean","Frigatebird","Fish and coconut","Islands scattered across the middle of the Pacific Ocean."],
+"Micronesia":["Oceania","Palikir","Hundreds of tiny islands","Fruit bat","Breadfruit","Small islands in the western Pacific, north of Papua New Guinea."],
+"Marshall Is.":["Oceania","Majuro","Low coral islands","Sea turtle","Fish and breadfruit","Islands in the Pacific Ocean, north of Kiribati."],
+"Palau":["Oceania","Ngerulmud","A lake full of jellyfish","Dugong","Grilled fish","Islands in the western Pacific, east of the Philippines."],
+"Nauru":["Oceania","Yaren","One of the world's smallest countries","Frigatebird","Coconut fish","A tiny island in the Pacific, north-east of Australia."],
+"Tuvalu":["Oceania","Funafuti","Very low coral islands","Sea turtle","Pulaka (swamp taro)","A small group of islands in the Pacific, north of Fiji."]
 };
