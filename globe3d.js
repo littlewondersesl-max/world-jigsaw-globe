@@ -204,13 +204,47 @@ const o=A.createOscillator(),og=A.createGain();o.frequency.setValueAtTime(110,T)
 // ---- animation helpers ----
 const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;let anims=[];const anim=(ms,fn)=>new Promise(r=>{const t0=performance.now();anims.push(now=>{const x=Math.min(1,(now-t0)/ms);fn(x);if(x>=1){r();return true}})});
 let queue=Promise.resolve();
+// North, Central America and the Caribbean use the same kind of masked terrain mesh as Brazil.
+// South America already has the continent look-3 patch. These meshes are built on first placement.
+const AM=new Map();
+function amBBox(f){let x0=180,x1=-180,y0=90,y1=-90;const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
+ for(const poly of polys)for(const ring of poly)for(const p of ring){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1];}
+ const pad=Math.max(.2,Math.max(x1-x0,y1-y0)*.06);return [x0-pad,y0-pad,x1+pad,y1+pad];}
+function amCanvas(f,box){const [x0,y0,x1,y1]=box;const span=Math.max(x1-x0,y1-y0);
+ const maxPx=span>30?1024:span>8?768:512;const aspect=(x1-x0)/Math.max(.2,y1-y0);
+ let w=maxPx,h=maxPx;if(aspect>=1)h=Math.max(64,Math.round(maxPx/aspect));else w=Math.max(64,Math.round(maxPx*aspect));
+ const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');
+ ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+ if(WTI.complete&&WTI.naturalWidth){const sx=(x0+180)/360*WTI.naturalWidth,sy=(90-y1)/180*WTI.naturalHeight,sw=(x1-x0)/360*WTI.naturalWidth,sh=(y1-y0)/180*WTI.naturalHeight;
+  ctx.drawImage(WTI,sx,sy,Math.max(1,sw),Math.max(1,sh),0,0,w,h);}
+ else {ctx.fillStyle='#6f8f55';ctx.fillRect(0,0,w,h);}
+ ctx.globalCompositeOperation='destination-in';ctx.beginPath();
+ const polys=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;
+ for(const poly of polys){const ring=poly[0];if(!ring||ring.length<3)continue;ring.forEach((p,i)=>{const px=(p[0]-x0)/(x1-x0)*w,py=(y1-p[1])/(y1-y0)*h;if(i)ctx.lineTo(px,py);else ctx.moveTo(px,py);});ctx.closePath();}
+ ctx.fill();ctx.globalCompositeOperation='source-over';return c;}
+function amMake(f){const box=amBBox(f),canvas=amCanvas(f,box);const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;tex.needsUpdate=true;
+ const [x0,y0,x1,y1]=box,span=Math.max(x1-x0,y1-y0),N=Math.max(36,Math.min(96,Math.round(span*3)));
+ const pos=[],uv=[],idx=[];
+ for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const u=i/N,v=j/N,lon=x0+(x1-x0)*u,lat=y1-(y1-y0)*v;
+  const la=lat*Math.PI/180,lo=lon*Math.PI/180;pos.push(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo));uv.push(u,1-v);}
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,c,b,b,c,d);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+ const fade={value:1};const mat=new THREE.ShaderMaterial({uniforms:{map:{value:tex},sun:U.sun,fade},transparent:true,depthWrite:false,
+  vertexShader:`varying vec2 vu;varying vec3 wn;void main(){vu=uv;wn=normalize(mat3(modelMatrix)*normalize(position));gl_Position=projectionMatrix*modelViewMatrix*vec4(normalize(position)*1.502,1.);}`,
+  fragmentShader:`uniform sampler2D map;uniform vec3 sun;uniform float fade;varying vec2 vu;varying vec3 wn;
+   void main(){vec4 m=texture2D(map,vu);if(m.a<.15)discard;vec3 mp=pow(m.rgb,vec3(2.2));float l=dot(normalize(wn),sun);
+   vec3 col=mp*(.22+1.*smoothstep(-.1,.35,l));gl_FragColor=vec4(pow(col,vec3(1./2.2)),m.a*fade);}`});
+ const mesh=new THREE.Mesh(g,mat);mesh.frustumCulled=false;mesh.renderOrder=2;mesh.visible=false;G.add(mesh);return {mesh,fade,tex,g};}
+function amShow(f){let M=AM.get(f.name);if(!M){M=amMake(f);AM.set(f.name,M);}M.mesh.visible=true;M.fade.value=1;return M;}
+function amClear(){for(const M of AM.values())M.mesh.visible=false;}
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
  const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
+ if(/America/.test(cont||'')){const M=amShow(f);if(M){M.fade.value=0;await anim(700,x=>M.fade.value=ease(x));}return}
  fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
-function placeNow(f,cont){if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
-function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;for(const c of CS)unload(c);}
+function placeNow(f,cont){if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(/America/.test(cont||'')){amShow(f);return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;amClear();for(const c of CS)unload(c);}
 let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
 // camera
 function camDist(){return C.position.distanceTo(O.target.lengthSq()>1?O.target.clone().multiplyScalar(0):O.target)}

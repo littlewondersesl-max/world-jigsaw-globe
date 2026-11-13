@@ -1,6 +1,8 @@
 *{box-sizing:border-box}body{margin:0;font-family:"Trebuchet MS",Arial,sans-serif;background:#0d2240;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden;touch-action:none}
 header{display:flex;gap:10px;align-items:center;padding:6px 12px;background:#132f57;flex-wrap:wrap;overflow:visible;position:relative;z-index:40}h1{font-size:20px;margin:0 8px 0 0}
-select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:pointer}#progress{font-weight:bold;font-size:18px;margin-left:auto;background:#ffd34d;color:#222;padding:4px 12px;border-radius:12px}
+select,button{font:inherit;border-radius:10px;border:0;padding:6px 10px;cursor:pointer}
+#topEnd{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none;flex-wrap:nowrap;position:relative;z-index:42}
+#progress{font-weight:bold;font-size:18px;margin-left:0;flex:none;white-space:nowrap;background:#ffd34d;color:#222;padding:4px 12px;border-radius:12px}
 .chk{font-size:14px}main{flex:1;display:flex;min-height:0}
 #tray{width:230px;background:linear-gradient(#2a1a0f,#1d130b);border-right:6px solid #3a2414;box-shadow:inset 0 0 30px #000a;overflow-y:auto;padding:6px}#tray h2,#hints h2{margin:4px;font-size:16px}
 #pieces{display:grid;grid-template-columns:1fr 1fr;gap:6px}.piece{background:radial-gradient(#3b2616,#24170d);box-shadow:inset 0 2px 6px #000c;border-radius:10px;height:96px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:grab}
@@ -177,7 +179,7 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #provBox .fmeter{font-style:normal;font-size:11px;margin-top:1px;opacity:.9}
 
 /* Countries button + place tab + dropdown */
-#countriesWrap{position:relative;z-index:30;margin-left:4px;overflow:visible}
+#countriesWrap{position:relative;z-index:30;margin-left:0;overflow:visible;flex:none}
 #countriesB{background:#243a55;color:#e8eef3;border:1px solid #3a5575;border-radius:8px;padding:5px 10px;font:600 13px/1.2 system-ui,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 #countriesB:hover,#countriesB[aria-expanded="true"]{background:#2f4a6a}
 #countriesB b{background:#1a2a40;border-radius:8px;padding:1px 6px;font-size:12px;color:#ffe08a;min-width:1.2em;text-align:center}
