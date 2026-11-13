@@ -63,7 +63,51 @@ function face(f){if(f._face)return f._face;const pr=d3.geoOrthographic().rotate(
    const lat=Math.asin(z*sp+Y*cp),lon=l0+Math.atan2(X,z*cp-Y*sp);const la=lat*180/Math.PI,lo=lon*180/Math.PI;
    let u,v;if(src.equirect){u=((lo+180)/360%1+1)%1;v=(90-la)/180;}else{u=(lo-src.lon0)/(src.lon1-src.lon0);v=(src.lat1-la)/(src.lat1-src.lat0);if(u<0||u>1||v<0||v>1)continue;}
    const rgb=sampleBilinear(src.src,u,v),t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}}
- x.putImageData(id,0,0);return f._face={url:c.toDataURL('image/jpeg',hiRes(f.name)?.9:.86),b,px:Math.max(cw,ch)};}
+ x.putImageData(id,0,0);f._face={url:c.toDataURL('image/jpeg',.92),b,px:Math.max(cw,ch)};return f._face;}
+// A loose piece is drawn from the coarse world photo first, then replaced by a Sentinel-2 mosaic
+// at enough zoom that the face stays sharp when the player enlarges it.
+const FACE_TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/';
+const faceTiles=new Map();
+const sharpQ=[];let sharpBusy=0;
+function mercY(lat){const lr=Math.max(-1.48,Math.min(1.48,lat*Math.PI/180));return (1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2;}
+function sharpZ(span){const spanD=Math.max(span,.3);
+ // Aim for about 1400 source pixels across the country, but keep the mosaic inside a 12-tile window.
+ const zWant=Math.round(Math.log2(1400/spanD)),zFit=Math.floor(Math.log2(10*360/spanD));
+ return Math.max(4,Math.min(12,zWant,zFit));}
+function loadTile(z,x,y){const n=2**z;x=(x%n+n)%n;y=Math.max(0,Math.min(n-1,y));const k=z+'/'+y+'/'+x;if(faceTiles.has(k))return faceTiles.get(k);
+ const p=new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>res(null);im.src=FACE_TILE+k+'.jpg';});
+ faceTiles.set(k,p);return p;}
+function wantSharp(f,first){if(!f||f._sharp)return;const i=sharpQ.indexOf(f);if(f._sharpWait){if(first&&i>0){sharpQ.splice(i,1);sharpQ.unshift(f);}return;}
+ f._sharpWait=true;if(first)sharpQ.unshift(f);else sharpQ.push(f);pumpSharp();}
+function pumpSharp(){while(sharpBusy<2&&sharpQ.length){sharpBusy++;const f=sharpQ.shift();buildSharpFace(f).then(ok=>{f._sharpWait=false;if(ok){f._sharp=true;retint(f);}sharpBusy--;pumpSharp();});}}
+async function buildSharpFace(f){const b=d3.geoBounds(f);let lon0=b[0][0],lon1=b[1][0],lat0=b[0][1],lat1=b[1][1];
+ if(lon1-lon0>180){const mid=f.c[0];const shift=lon=>lon-mid>180?lon-360:mid-lon>180?lon+360:lon;lon0=shift(lon0);lon1=shift(lon1);if(lon1<lon0){const t=lon0;lon0=lon1;lon1=t;}}
+ const span=Math.max(lon1-lon0,lat1-lat0,.25),z=sharpZ(span),n=2**z;
+ const x0=Math.floor((lon0+180)/360*n)-1,x1=Math.ceil((lon1+180)/360*n)+1;
+ const y0=Math.floor(mercY(lat1)*n)-1,y1=Math.ceil(mercY(lat0)*n)+1;
+ const nx=Math.min(12,Math.max(1,x1-x0)),ny=Math.min(12,Math.max(1,y1-y0));
+ const cell=256,mos=document.createElement('canvas');mos.width=nx*cell;mos.height=ny*cell;const mx=mos.getContext('2d',{willReadFrequently:true});
+ let got=0;const jobs=[];for(let j=0;j<ny;j++)for(let i=0;i<nx;i++)jobs.push(loadTile(z,x0+i,y0+j).then(im=>{if(im){mx.drawImage(im,i*cell,j*cell,cell,cell);got++;}}));
+ await Promise.all(jobs);if(!got)return false;
+ const faceB=f._face&&f._face.b;if(!faceB)return false;
+ const bw=faceB[1][0]-faceB[0][0],bh=faceB[1][1]-faceB[0][1],FS=Math.round(Math.min(1792,1280*Math.min(2,window.devicePixelRatio||1)));
+ const k=FS/Math.max(bw,bh),cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
+ const c=document.createElement('canvas');c.width=cw;c.height=ch;const ctx=c.getContext('2d',{willReadFrequently:true});const id=ctx.createImageData(cw,ch),o=id.data;
+ const l0=f.c[0]*Math.PI/180,p0=f.c[1]*Math.PI/180,sp=Math.sin(p0),cp=Math.cos(p0);
+ const md=mx.getImageData(0,0,mos.width,mos.height).data;
+ const sample=(lon,lat)=>{let x=(lon+180)/360*n,y=mercY(lat)*n;const px=(x-x0)/(nx)*mos.width,py=(y-y0)/(ny)*mos.height;
+  if(px<0||py<0||px>=mos.width-1||py>=mos.height-1)return null;
+  const xA=px|0,yA=py|0,tx=px-xA,ty=py-yA,at=(X,Y)=>{const i=(Y*mos.width+X)*4;return [md[i],md[i+1],md[i+2]];};
+  const a=at(xA,yA),b2=at(Math.min(mos.width-1,xA+1),yA),c2=at(xA,Math.min(mos.height-1,yA+1)),e=at(Math.min(mos.width-1,xA+1),Math.min(mos.height-1,yA+1));
+  return [0,1,2].map(q=>((a[q]*(1-tx)+b2[q]*tx)*(1-ty)+(c2[q]*(1-tx)+e[q]*tx)*ty)|0);};
+ for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const X=faceB[0][0]+(i+.5)/k,Y=-(faceB[0][1]+(j+.5)/k),rr=X*X+Y*Y;if(rr>=1)continue;const zz=Math.sqrt(1-rr);
+  const lat=Math.asin(Math.max(-1,Math.min(1,zz*sp+Y*cp)))*180/Math.PI,lon=(l0+Math.atan2(X,zz*cp-Y*sp))*180/Math.PI;
+  const rgb=sample(lon,lat);if(!rgb)continue;const t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}
+ ctx.putImageData(id,0,0);f._face={url:c.toDataURL('image/jpeg',.92),b:faceB,px:Math.max(cw,ch),sharp:true};return true;}
+function retint(f){const url=f._face&&f._face.url;if(!url||!pieces)return;
+ for(const p of pieces){if(p.f!==f)continue;
+  for(const root of [p.el,p.ov,p.body&&p.body.el,(drag&&drag.p===p)?ghost:null]){if(!root)continue;root.querySelectorAll('image').forEach(im=>{if(im.getAttribute('href')!==url)im.setAttribute('href',url);});}
+  if(p.pid){const g=shapeSVG(f,K);pcTex(p,g);}}}
 let svgN=0;
 function shapeSVG(f,scale,cls){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(scale).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
  const b=gp.bounds(f),m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],1);
@@ -94,7 +138,7 @@ function renderTray(){const box=$('pieces');box.innerHTML='';const list=pieces.f
  step();}
 function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.parked&&!(anc&&anc.p===p)&&!placed.has(p.f.name)){clearTimeout(setAngle.j);setAngle.j=setTimeout(()=>{if(p.parked&&!placed.has(p.f.name)&&fits(p,[p.lon,p.lat]))revealPlaced(p);},350);}// a correct turn can still snap a parked piece in, without taking rotate away afterwards
 if(p.ov)p.ov.firstChild.style.transform=`rotate(${p.angle}deg)`;if(anc&&anc.p===p&&anc.step==='rot'){clearTimeout(setAngle.t);setAngle.t=setTimeout(checkAnc,250);}if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;}
-function select(p){sel=p;document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();}
+function select(p){sel=p;if(p&&p.f)wantSharp(p.f,true);document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();}
 // drag
 let drag=null,ghost=null;
 function pieceScale(p){if(p.s==null)p.s=boxScale(p.f);return p.s;}
@@ -119,9 +163,9 @@ function bounce(p){play('miss');if(p.el){p.el.animate([{transform:'translateX(-8
 const D2R=Math.PI/180,R2D=180/Math.PI;let parked=[],anc=null;const K=100;
 const layer=document.createElement('div');layer.id='park';document.body.appendChild(layer);
 let WOOD=null;fetch('wood.jpg').then(r=>r.blob()).then(b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)})).then(u=>WOOD=u);
-let pcN=0;function pcTex(p,g){const C=1024,cid=(g.svg.match(/clipPath id="([^"]+)"/)||[])[1],svg=g.svg.replace('stroke="#2a170a"',`clip-path="url(#${cid})" stroke="#2a170a"`).replace(/^<svg /,'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ').replace(/width="[\d.]+" height="[\d.]+">/,`width="${C}" height="${C}">`)
+let pcN=0;function pcTex(p,g){const C=Math.min(2048,Math.max(1024,(p.f&&p.f._face&&p.f._face.px)||1024)),cid=(g.svg.match(/clipPath id="([^"]+)"/)||[])[1],svg=g.svg.replace('stroke="#2a170a"',`clip-path="url(#${cid})" stroke="#2a170a"`).replace(/^<svg /,'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ').replace(/width="[\d.]+" height="[\d.]+">/,`width="${C}" height="${C}">`)
   .replace('<defs>',`<defs><pattern id="wood" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="${WOOD||'wood.jpg'}" width="1" height="1" preserveAspectRatio="none"/></pattern>`);
- const im=new Image();const pidAt=p.pid;im.onload=()=>{if(p.pid!==pidAt)return;const c=document.createElement('canvas');c.width=c.height=C;const x=c.getContext('2d');x.drawImage(im,0,0,C,C);
+ const im=new Image();const pidAt=p.pid;im.onload=()=>{if(p.pid!==pidAt)return;const c=document.createElement('canvas');c.width=c.height=C;const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(im,0,0,C,C);
   // Keep only the country silhouette so a square mesh cannot paint a detached wood slab outside the shape.
   if(g.d){x.globalCompositeOperation='destination-in';x.save();x.translate(C/2,C/2);x.scale(C/(2*g.r),C/(2*g.r));x.fill(new Path2D(g.d));x.restore();x.globalCompositeOperation='source-over';}
   const add=()=>{if(p.pid===pidAt)G3.pc.add(pidAt,c,g.r/K);};if(window.G3)add();else addEventListener('g3ready',add,{once:true});};im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
@@ -148,10 +192,12 @@ function startAnchor(p,ll){park(p,ll,boxScale(p.f));anchorName=p.f.name;anc={p,s
  const cont=FACTS[p.f.name][0];say(`⚓ Anchor: ${p.f.name}. The world is built around it.`,2600);{const t0=performance.now();(function bl(){const t=(performance.now()-t0)/1400;if(t>=1||!p.ov){p.op=1;return}p.op=.25+.75*(.5+.5*Math.cos(t*Math.PI*6));requestAnimationFrame(bl);})();}
 
  setTimeout(()=>nextStep(),1500);p.ov.addEventListener('pointerdown',ancDown);}
-function nextStep(){const p=anc.p;if(Math.abs(p.s-1)>.12){anc.step='scale';say(p.s<1?'Too small: drag the handle outward ⤢':'Too big: drag the handle inward ⤡',3500);return}p.s=1;
- if(Math.abs(angOff(p.angle))>10){anc.step='rot';say('Turn it north-up: spin it like a steering wheel ⟲ ⟳',3500);return}setAngle(p,0);
- if(anc.step!=='lat'){anc.step='lat';const d=p.f.c[0]-p.lon;G3.offsetLon(-d);for(const q of parked)q.lon=((q.lon+d+540)%360)-180;
-  G3.outline(p.f);say('Now slide it up or down into the outline ↕',3500);}}
+function latTol(f){return Math.max(6,(f.rad||.05)*180/Math.PI*.85);}
+function nextStep(){const p=anc.p;if(Math.abs(p.s-1)>.4){anc.step='scale';say(p.s<1?'Make '+p.f.name+' a bit bigger with the corner handle.':'Make '+p.f.name+' a bit smaller with the corner handle.',3500);return}p.s=1;
+ if(Math.abs(angOff(p.angle))>angTol(p.f)){anc.step='rot';say('Turn '+p.f.name+' so north is up.',3500);return}setAngle(p,0);
+ const d=p.f.c[0]-p.lon;G3.offsetLon(-d);for(const q of parked)q.lon=((q.lon+d+540)%360)-180;p.lon=p.f.c[0];
+ if(Math.abs(p.lat-p.f.c[1])<=latTol(p.f)){const q=p;anc=null;aui.innerHTML='';aui._h=null;G3.outline(null);place(q);select(q);say(q.f.name+' placed',1800);return;}
+ anc.step='lat';G3.outline(p.f);say('Slide '+p.f.name+' north or south onto its country.',3500);}
 function ancDown(e){if(!anc||anc.p.ov!==e.currentTarget&&e.currentTarget!==hdl)return;e.preventDefault();e.stopPropagation();const p=anc.p,st=anc.step;if(st==='blink')return;
  const el=e.currentTarget;el.setPointerCapture(e.pointerId);const cx=p.sx,cy=p.sy,d0=Math.hypot(e.clientX-cx,e.clientY-cy)||1,s0=p.s,a0=p.angle,t0=Math.atan2(e.clientY-cy,e.clientX-cx);
  el.onpointermove=ev=>{if(pin)return;if(st==='scale')p.s=Math.max(.05,Math.min(8,s0*Math.hypot(ev.clientX-cx,ev.clientY-cy)/d0));
@@ -164,9 +210,9 @@ addEventListener('pointerdown',e=>{const p=(sel&&sel.parked&&sel)||(anc&&anc.p);
 addEventListener('pointermove',e=>{if(!TP.has(e.pointerId))return;TP.set(e.pointerId,[e.clientX,e.clientY]);if(!pin||TP.size<2||!pin.p)return;e.stopPropagation();const [a,b]=[...TP.values()];
  pin.p.s=Math.max(.05,Math.min(8,pin.s*Math.hypot(b[0]-a[0],b[1]-a[1])/pin.d));},true);
 const tpUp=e=>{if(!TP.delete(e.pointerId))return;if(pin&&TP.size<2){pin=null;if(anc)checkAnc();}};addEventListener('pointerup',tpUp,true);addEventListener('pointercancel',tpUp,true);
-function checkAnc(){if(!anc)return;const p=anc.p;if(anc.step==='scale'&&Math.abs(p.s-1)<=.12){p.s=1;play('place');nextStep();}
- else if(anc.step==='rot'&&Math.abs(angOff(p.angle))<=10){setAngle(p,0);play('place');nextStep();}
- else if(anc.step==='lat'&&Math.abs(p.lat-p.f.c[1])<=Math.max(2,p.f.rad*R2D*.3)){const q=p;anc=null;aui.innerHTML='';aui._h=null;G3.outline(null);place(q);select(q);}}
+function checkAnc(){if(!anc)return;const p=anc.p;if(anc.step==='scale'&&Math.abs(p.s-1)<=.4){p.s=1;play('place');nextStep();}
+ else if(anc.step==='rot'&&Math.abs(angOff(p.angle))<=angTol(p.f)){setAngle(p,0);play('place');nextStep();}
+ else if(anc.step==='lat'&&Math.abs(p.lat-p.f.c[1])<=latTol(p.f)){const q=p;anc=null;aui.innerHTML='';aui._h=null;G3.outline(null);place(q);select(q);say(q.f.name+' placed',1800);}}
 const hdl=document.createElement('div');hdl.id='hdl';hdl.style.display='none';document.body.appendChild(hdl);hdlReady=true;
 hdl.addEventListener('pointerdown',e=>{const p=(sel&&sel.parked&&sel)||(anc&&anc.p);if(!p||p.sx==null)return;e.preventDefault();e.stopPropagation();select(p);hdl.setPointerCapture(e.pointerId);
  const cx=p.sx,cy=p.sy,d0=Math.hypot(e.clientX-cx,e.clientY-cy)||1,s0=pieceScale(p);
@@ -181,22 +227,30 @@ let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const 
  if(st==='lat'){const f=p.f;if(G3.facing(f.c[0],f.c[1])){const [ox,oy]=G3.project(f.c[0],f.c[1]);const sc=G3.screenRadius(),pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(sc).translate([ox,oy]).clipAngle(90);
    G3.outlineOp(.55+.45*Math.cos(performance.now()/160));const dy=oy-y;if(Math.abs(dy)>R*.5)h+=`<line x1="${x}" y1="${y+Math.sign(dy)*(R*.6)}" x2="${x}" y2="${y+Math.sign(dy)*(R*.6+22)}" marker-end="url(#ah)"/>`;}}
  if(aui._h!==h){aui._h=h;aui.innerHTML='<defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker></defs>'+h;}}
-function fits(p,ll){const f=p.f,easy=$('easy').checked,small=f.rad<0.12;let tol=Math.max(0.09,f.rad*0.9);if(easy&&small)tol=Math.max(tol,0.25);
- if(!(d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll)))return false;if(Math.abs(angOff(p.angle))>25&&!(easy&&small))return false;
- const nb=neigh[f.name]||[];if(!nb.length||nb.some(n=>placed.has(n)))return true;
- // must join a placed neighbour, unless this piece's whole land group in the set (e.g. UK+Ireland, Haiti+Dominican Rep.) has nothing placed yet
- const inSet=new Set(pieces.map(q=>q.f.name)),seen=new Set([f.name]),Q=[f.name];while(Q.length){for(const n of neigh[Q.pop()]||[])if(inSet.has(n)&&!seen.has(n)){if(placed.has(n))return false;seen.add(n);Q.push(n);}}return true;}
-function revealPlaced(p){if(!p||placed.has(p.f.name))return;p.s=1;if(Math.abs(angOff(p.angle))<=10)p.angle=0;place(p,true);}
+function placeTol(f){const rad=f.rad||.05,easy=$('easy')&&$('easy').checked;
+ // A near miss in the sea still counts. Small countries get a wider halo. The halo stops short of a neighbour's centre.
+ let tol=Math.max(.1,rad*.75);if(rad<.1)tol=Math.max(tol,.16);if(rad<.045)tol=Math.max(tol,.2);if(easy)tol=Math.min(.42,tol*1.35);
+ let near=2;const list=pieces||[];for(const p of list){const o=p.f;if(!o||o===f||o.name===f.name)continue;const d=d3.geoDistance(f.c,o.c);if(d<near)near=d;}
+ if(near<1.5)tol=Math.min(tol,Math.max(.08,near*.42));
+ return tol;}
+function angTol(f){const easy=$('easy')&&$('easy').checked;return ((f.rad||.05)<.1?68:50)+(easy?14:0);}
+function countryAt(ll,skip){if(!ll||!pieces)return null;for(const p of pieces){const o=p.f;if(!o||o===skip||o.name===(skip&&skip.name))continue;if(d3.geoContains(o,ll))return o;}return null;}
+function nearPlace(f,ll){return d3.geoContains(f,ll)||(!countryAt(ll,f)&&d3.geoDistance(ll,f.c)<placeTol(f));}
+function aimed(p){return Math.abs(angOff(p.angle))<=angTol(p.f);}
+function fitState(p,ll){const f=p.f,tol=placeTol(f),dist=d3.geoDistance(ll,f.c),inside=d3.geoContains(f,ll),other=!inside&&countryAt(ll,f);
+ const pos=inside||(!other&&dist<tol),almost=pos||(!other&&dist<tol*1.55)||(!!other&&dist<tol*1.2);
+ if(pos&&aimed(p))return 'ok';if(pos&&!aimed(p))return 'angle';if(almost)return 'almost';return 'miss';}
+function fits(p,ll){return fitState(p,ll)==='ok';}
+function revealPlaced(p){if(!p||placed.has(p.f.name))return;p.s=1;if(Math.abs(angOff(p.angle))<=angTol(p.f))p.angle=0;place(p,true);}
 function joinParked(){if(MODE==='prov'&&provPending())return;let again=true;while(again){again=false;for(const q of [...parked]){if(anc&&anc.p===q)continue;if(!placed.has(q.f.name)&&fits(q,[q.lon,q.lat])){revealPlaced(q);again=true;}}}}
 function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||x>r.right||y<r.top||y>r.bottom)?null:G3.pick(x,y);
  if(!ll){if(p.parked){unpark(p);renderTray();}return;}
  if(anc&&anc.p===p)return;
- if(placed.size===0&&!anc){startAnchor(p,ll);return;}
- if(placed.size===0){park(p,ll,p.parked?p.s:boxScale(p.f));say('Parked. Finish the anchor first ⚓',2000);return;}
  if(MODE==='prov'&&provPending()){park(p,ll,1);say('Finish the provinces of '+provPending()+' first',2400);return;}
- if(fits(p,ll)){if(!p.parked)park(p,ll,p.s!=null?p.s:1);else{p.lon=ll[0];p.lat=ll[1];}revealPlaced(p);select(p);return;}
- park(p,ll,p.s!=null?p.s:boxScale(p.f));say(neighbourHint(p,ll),2200);}
-function neighbourHint(p,ll){const f=p.f,tol=Math.max(0.09,f.rad*0.9);return (d3.geoDistance(ll,f.c)<tol||d3.geoContains(f,ll))&&Math.abs(angOff(p.angle))>25?'Right place! Now turn it to fit ⟲ ⟳':'Parked here. It joins when the puzzle reaches it.';}
+ const st=fitState(p,ll);
+ if(st==='ok'){if(!anchorName)anchorName=p.f.name;if(!p.parked)park(p,ll,1);else{p.lon=ll[0];p.lat=ll[1];}revealPlaced(p);select(p);say(p.f.name+' placed',1800);return;}
+ park(p,ll,p.s!=null?p.s:boxScale(p.f));say(dropHint(p,st),2400);}
+function dropHint(p,st){const n=p.f.name;if(st==='angle')return 'Right place. Turn '+n+' so north is up.';if(st==='almost')return 'Almost — move '+n+' onto its country.';return 'Not on '+n+' yet.';}
 function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);if(p.parked)select(p);else sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length))setTimeout(maybeWin,900);}
 function anchorBlocked(p){return !!(p&&((anc&&anc.p===p)||(anchorName&&p.f.name===anchorName)));}
 function repaintPlaced(){if(!window.G3)return;G3.clear();for(const n of placed){const f=byName[n];if(!f)continue;if(MODE==='prov')G3.fog(f);else G3.placeNow(f,(FACTS[n]||[''])[0]);}
@@ -220,6 +274,7 @@ function showPlaceTab(n){const tab=$('placeTab');if(!tab||!FACTS[n])return;clear
   const f=FACTS[n],fl=FLAGS[n];const flag=fl?`<img class="ptFlag" alt="" src="flags/${fl[0]}.svg">`:'<span class="ptFlag"></span>';
   tab.innerHTML=`<div class="ptIn">${flag}<div class="ptBody"><strong>${prettyCountry(n)}</strong><span>🏛️ ${f[1]} · ${f[0]}</span><span>⭐ ${f[2]}</span><div class="ptHint">Tap for the full card</div></div></div>`;
   tab.dataset.n=n;tab.hidden=false;
+  const tube=$('tubeBar');if(tube)tab.style.top=(tube.getBoundingClientRect().bottom+12)+'px';
   // Two-frame show so the opacity/transform transition actually runs (display:none→block skips it).
   tab.classList.remove('on');
   tab.style.transition='none';
@@ -422,16 +477,16 @@ window.__release=release;
 // carry: piece follows the pointer. A drag releases on lift; a click/tap keeps it on the cursor until the next click/tap.
 let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';remSpace(p);
  drag={p,el:src,x:e.clientX,y:e.clientY,moved:true,hist:[{t:performance.now(),x:e.clientX,y:e.clientY}]};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
- const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;
+ const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;if(window.G3&&G3.O)G3.O.enabled=false;
  const mv=ev=>{if(!drag)return;moveGhost(ev.clientX,ev.clientY);const h=drag.hist;h.push({t:performance.now(),x:ev.clientX,y:ev.clientY});if(h.length>8)h.shift();},
  dn=ev=>{const skip=ev.target.closest&&ev.target.closest('.dh,#card,#credP,#hints,#zoom,#menuW,#topbar,#machines,header');if(skip&&!(ev.target.closest&&ev.target.closest('.mach'))){hd=1;return;}if(performance.now()-t0<450&&Math.hypot(ev.clientX-x0,ev.clientY-y0)<12){hd=1;ev.stopPropagation();ev.preventDefault();return;}
   downs++;ev.stopPropagation();ev.preventDefault();},
   up=ev=>{if(hd){hd=0;return;}const far=Math.hypot(ev.clientX-x0,ev.clientY-y0)>12;if(!far&&!downs)return;ev.stopPropagation();
    removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);removeEventListener('keydown',esc);
    let vx=0,vy=0;const h=drag&&drag.hist||[];if(h.length>=2){const a=h[0],b=h[h.length-1],dt=Math.max(16,b.t-a.t);vx=(b.x-a.x)/(dt/1000);vy=(b.y-a.y)/(dt/1000);}
-   drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY,vx,vy);};
+   drag=null;ghost.remove();carrying=null;if(window.G3&&G3.O)G3.O.enabled=true;if(p.body)p.body.el.style.visibility='';const b=p.body;if(b)remBody(p);release(p,ev.clientX,ev.clientY,vx,vy);};
  const esc=ev=>{if(ev.key!=='Escape'||carrying!==p)return;removeEventListener('keydown',esc);removeEventListener('pointermove',mv,true);removeEventListener('pointerdown',dn,true);removeEventListener('pointerup',up,true);
-  drag=null;ghost.remove();carrying=null;if(p.body)p.body.el.style.visibility='';if(!p.body&&!p.parked&&!p.space&&!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();};
+  drag=null;ghost.remove();carrying=null;if(window.G3&&G3.O)G3.O.enabled=true;if(p.body)p.body.el.style.visibility='';if(!p.body&&!p.parked&&!p.space&&!placed.has(p.f.name)){const W=innerWidth;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),true);}renderTray();syncDrawers();};
  addEventListener('keydown',esc);
  addEventListener('pointermove',mv,true);addEventListener('pointerdown',dn,true);addEventListener('pointerup',up,true);}
 // stack bottom-left: a random loose piece from the left drawer
@@ -827,7 +882,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
 Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,coinTreePx,setCoins,addCoins,addSpace,remSpace,enterOrbit,recallOrbiters,orbiters,isUiBlocked,dismissCard,showPlaceTab,openCountryCard,updCountriesUI,hidePlaceTab,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
-Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack,addBody,unplace,claimPiece,layoutChrome});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});Object.defineProperty(window.__game,'anchorName',{get:()=>anchorName});
+Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack,addBody,unplace,claimPiece,layoutChrome,select});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});Object.defineProperty(window.__game,'anchorName',{get:()=>anchorName});
 addEventListener('resize',()=>{layoutSecs();});layoutChrome();
 })();
 (function(){const B=document.getElementById('menuB'),L=document.getElementById('menuL'),P=document.getElementById('credP');if(!B)return;

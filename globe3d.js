@@ -298,12 +298,16 @@ function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW
 let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
 // camera
 function camDist(){return C.position.distanceTo(O.target.lengthSq()>1?O.target.clone().multiplyScalar(0):O.target)}
-function spinTo(c,zoom){const p0=C.position.clone(),d0=p0.length(),d1=zoom?Math.max(1.75,6.2/zoom):d0;O.target.set(0,0,0);
- // turn the globe (not the camera) so the place faces the viewer and stays on the sunlit side
- const q0=G.quaternion.clone(),cur=sv(c[0],c[1]).applyQuaternion(q0),q1=new THREE.Quaternion().setFromUnitVectors(cur,p0.clone().normalize()).multiply(q0);
- {const cd=p0.clone().normalize(),nU=new THREE.Vector3(0,1,0).applyQuaternion(q1).projectOnPlane(cd),cU=C.up.clone().projectOnPlane(cd);if(nU.lengthSq()>1e-6&&cU.lengthSq()>1e-6){nU.normalize();cU.normalize();
+function spinCalm(){O.target.set(0,0,0);C.up.set(0,1,0);O.maxPolarAngle=Math.PI;O.minPolarAngle=0;
+ if(O._sphericalDelta)O._sphericalDelta.set(0,0,0);if(O._panOffset)O._panOffset.set(0,0,0);
+ if(O._quat)O._quat.identity();if(O._quatInverse)O._quatInverse.identity();}
+function spinTo(c,zoom){const dWant=zoom?Math.max(1.75,6.2/zoom):C.position.length(),d1=Math.min(O.maxDistance||12,Math.max(3.5,dWant));
+ const from=C.position.clone(),to=new THREE.Vector3(0,.22,1).setLength(d1);spinCalm();
+ // Turn the globe, and park the camera on a steady view, so the country faces the player and the globe stays in frame.
+ const q0=G.quaternion.clone(),cur=sv(c[0],c[1]).applyQuaternion(q0),q1=new THREE.Quaternion().setFromUnitVectors(cur,to.clone().normalize()).multiply(q0);
+ {const cd=to.clone().normalize(),nU=new THREE.Vector3(0,1,0).applyQuaternion(q1).projectOnPlane(cd),cU=new THREE.Vector3(0,1,0).projectOnPlane(cd);if(nU.lengthSq()>1e-6&&cU.lengthSq()>1e-6){nU.normalize();cU.normalize();
   const ang=Math.atan2(new THREE.Vector3().crossVectors(nU,cU).dot(cd),nU.dot(cU));q1.premultiply(new THREE.Quaternion().setFromAxisAngle(cd,ang));}}
- return anim(1000,x=>{const e=ease(x);G.quaternion.slerpQuaternions(q0,q1,e);C.position.setLength(d0+(d1-d0)*e)})}
+ return anim(900,x=>{const e=ease(x);G.quaternion.slerpQuaternions(q0,q1,e);spinCalm();C.position.lerpVectors(from,to,e);C.lookAt(0,0,0);})}
 function zoomBy(k){const d=C.position.length();const nd=Math.min(O.maxDistance,Math.max(1.5+(d-1.5)/k,(brPlaced||hdClose)?1.505:1.62));C.position.setLength(nd);}
 const rc=new THREE.Raycaster(),mv=new THREE.Vector2(),SP=new THREE.Sphere(new THREE.Vector3(),1.5);
 function pick(x,y){const r=R.domElement.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);rc.setFromCamera(mv,C);const p=new THREE.Vector3();if(!rc.ray.intersectSphere(SP,p))return null;
@@ -311,7 +315,7 @@ function pick(x,y){const r=R.domElement.getBoundingClientRect();mv.set((x-r.left
 function screenRadius(){const r=R.domElement.getBoundingClientRect();const d=Math.max(C.position.length(),1.5001);return (r.height/2)/Math.tan(THREE.MathUtils.degToRad(C.fov/2))*1.5/Math.sqrt(d*d-2.25)}
 function resize(){const r=host.getBoundingClientRect();C.aspect=r.width/Math.max(1,r.height);C.updateProjectionMatrix();R.setSize(r.width,r.height);}
 let grab=null;const GQ=new THREE.Quaternion(),AX=new THREE.Vector3(),RT=new THREE.Vector3(),UPV=new THREE.Vector3();
-R.domElement.addEventListener('pointerdown',e=>{if(window.__claimPiece&&window.__claimPiece(e)){grab=null;return}const alt=C.position.length()-1.5;if(e.button!==0||alt<.06||!pick(e.clientX,e.clientY)){grab=null;return}
+R.domElement.addEventListener('pointerdown',e=>{if((window.__game&&window.__game.carrying)||(window.__claimPiece&&window.__claimPiece(e))){grab=null;return}const alt=C.position.length()-1.5;if(e.button!==0||alt<.06||!pick(e.clientX,e.clientY)){grab=null;return}
  grab={x:e.clientX,y:e.clientY,id:e.pointerId};O.enabled=false;try{R.domElement.setPointerCapture(e.pointerId)}catch(_){}},{capture:true});
 addEventListener('pointermove',e=>{if(!grab||e.pointerId!==grab.id)return;const dx=e.clientX-grab.x,dy=e.clientY-grab.y;grab.x=e.clientX;grab.y=e.clientY;
  const h=R.domElement.clientHeight||800,k=1/Math.max(50,screenRadius());
@@ -332,14 +336,15 @@ function pcGeom(h,s){const N=40,pos=[],uv=[],idx=[];for(let j=0;j<=N;j++)for(let
   let th=Math.asin(Math.min(1,r))*s;th=Math.min(th,Math.PI*.98);const k=r>1e-9?Math.sin(th)/r:s;pos.push(u*k*PR,v*k*PR,Math.cos(th)*PR);uv.push(i/N,j/N);}
  for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i,b=a+1,c=a+N+1,d=c+1;idx.push(a,b,d,a,d,c);}
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);return g;}
-function pcAdd(id,canvas,h){pcDel(id);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;
+function pcAdd(id,canvas,h){pcDel(id);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=R.capabilities.getMaxAnisotropy();t.magFilter=THREE.LinearFilter;t.minFilter=THREE.LinearMipmapLinearFilter;
+ let alpha=null;try{const cx=canvas.getContext('2d',{willReadFrequently:true});if(cx){const im=cx.getImageData(0,0,canvas.width,canvas.height);alpha=im.data;}}catch(e){}
  const m=new THREE.Mesh(pcGeom(h,1),new THREE.ShaderMaterial({uniforms:{map:{value:t},op:{value:1},hi:{value:0},sun:U.sun},transparent:true,depthWrite:false,depthTest:true,polygonOffset:true,polygonOffsetFactor:-4,
  vertexShader:`varying vec2 vu;varying vec3 wn;void main(){vu=uv;wn=normalize(mat3(modelMatrix)*normalize(position));gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
  fragmentShader:`uniform sampler2D map;uniform float op,hi;uniform vec3 sun;varying vec2 vu;varying vec3 wn;void main(){vec4 c=texture2D(map,vu);if(c.a<.02)discard;vec3 N=normalize(wn);float l=dot(N,sun);
  vec3 col=pow(c.rgb,vec3(2.2))*(.22+1.*smoothstep(-.1,.35,l))+vec3(1.,.95,.85)*pow(max(dot(N,normalize(sun+vec3(0.,0.,1.))),0.),60.)*.08*smoothstep(0.,.3,l);
  float edge=smoothstep(.42,.04,min(min(vu.x,1.-vu.x),min(vu.y,1.-vu.y)));
  col+=vec3(1.,.86,.45)*hi*(.16+.5*edge);
- gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;m.userData.pid=id;
+ gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a*op);}`}));m.renderOrder=5;m.userData.pid=id;m.userData.alpha=alpha;m.userData.aw=canvas.width;m.userData.ah=canvas.height;
  const hold=new THREE.Group();hold.add(m);G.add(hold);PCS[id]={hold,m,h,s:1,rad:PR};}
 const _e=new THREE.Vector3(),_n=new THREE.Vector3(),_u=new THREE.Vector3(),_M=new THREE.Matrix4(),_Q=new THREE.Quaternion();
 function pcSet(id,o){const P=PCS[id];if(!P)return;if(o.s!=null&&Math.abs(o.s-P.s)>1e-4){P.m.geometry.dispose();P.m.geometry=pcGeom(P.h,o.s);P.s=o.s;}
@@ -373,10 +378,8 @@ function sampleBox(lon,lat,rad,h,drawS,angle){G.updateMatrixWorld(true);const n=
   pts.push({x:pr.x,y:pr.y,occluded:pr.occluded||pr.z>1,u:u0,v:v0});
   if(pr.occluded||pr.z>1)continue;any=true;if(pr.x<minX)minX=pr.x;if(pr.x>maxX)maxX=pr.x;if(pr.y<minY)minY=pr.y;if(pr.y>maxY)maxY=pr.y;}
  return {anyVis:any,minX,minY,maxX,maxY,pts};}
-function alphaAt(mesh,uv){const img=mesh.material&&mesh.material.uniforms&&mesh.material.uniforms.map&&mesh.material.uniforms.map.value&&mesh.material.uniforms.map.value.image;
- if(!img||!uv||!img.width)return 255;const ctx=img.getContext&&img.getContext('2d');if(!ctx)return 255;
- const px=Math.max(0,Math.min(img.width-1,uv.x*img.width|0)),py=Math.max(0,Math.min(img.height-1,(1-uv.y)*img.height|0));
- try{return ctx.getImageData(px,py,1,1).data[3];}catch(e){return 255;}}
+function alphaAt(mesh,uv){const a=mesh.userData.alpha;if(!a||!uv)return 255;const w=mesh.userData.aw,h=mesh.userData.ah;
+ const px=Math.max(0,Math.min(w-1,uv.x*w|0)),py=Math.max(0,Math.min(h-1,(1-uv.y)*h|0));return a[(py*w+px)*4+3];}
 function pickPiece(x,y){G.updateMatrixWorld(true);const r=R.domElement.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);rc.setFromCamera(mv,C);
  const hits=rc.intersectObjects(Object.values(PCS).map(P=>P.m),false).sort((a,b)=>a.distance-b.distance);
  for(const h of hits){const sp=new THREE.Vector3();if(rc.ray.intersectSphere(new THREE.Sphere(new THREE.Vector3(),1.52),sp)&&sp.distanceTo(C.position)<h.distance-0.02)continue;
