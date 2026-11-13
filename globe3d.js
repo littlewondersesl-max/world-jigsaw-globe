@@ -179,18 +179,19 @@ function tilt(alt){const k=brPlaced?ss(.06,.02,alt):0;C.getWorldDirection(VD);co
  let Pt;if(disc>0)Pt=o.clone().addScaledVector(VD,-b-Math.sqrt(disc));else Pt=o.clone().normalize().multiplyScalar(r);
  TG.set(0,0,0).lerp(Pt,k);O.target.copy(TG);UP.copy(YY).lerp(Pt.clone().normalize(),k).normalize();C.up.copy(UP);
  O._quat.setFromUnitVectors(C.up,YY);O._quatInverse.copy(O._quat).invert();
- O.minDistance=brPlaced?1.5055*(1-k)+.00012*k:1.62;O.maxPolarAngle=Math.PI-(Math.PI-1.38)*k;}
+ O.minDistance=brPlaced?1.5055*(1-k)+.00012*k:(hdClose?1.505:1.62);O.maxPolarAngle=Math.PI-(Math.PI-1.38)*k;}
 const FR=new THREE.Frustum(),PM=new THREE.Matrix4(),CW=new THREE.Vector3(),SPH=new THREE.Sphere();
 function lod(){C.updateMatrixWorld();FR.setFromProjectionMatrix(PM.multiplyMatrices(C.projectionMatrix,C.matrixWorldInverse));const dist=C.position.length(),alt=dist-1.5;
  O.rotateSpeed=Math.min(1,Math.max(.02,alt/1.2));O.zoomSpeed=Math.min(1,Math.max(.35,alt*2));atm.visible=alt>.08;
- PU.vex.value=.03+(.00113-.03)*ss(.25,.04,alt);tilt(alt);C.near=Math.max(alt*.3,.00003);const hz=Math.sqrt(Math.max(dist*dist-2.25,0));C.far=Math.min(dist+2.5,hz*1.3+.02);
+ PU.vex.value=.03+(.00113-.03)*ss(.25,.04,alt);tilt(alt);C.near=Math.max(alt*(hdClose?.05:.3),.00002);const hz=Math.sqrt(Math.max(dist*dist-2.25,0));C.far=Math.min(dist+2.5,hz*1.3+.02);
  PU.lift.value=.00002+.00398*ss(.25,1.,alt);land.scale.setScalar(1+Math.min(PU.lift.value*.15,.0004)/1.5);
  let far=Math.min(dist+2.5,hz*1.3+.02);if(alt>.45)far=Math.max(far,96);C.far=far;C.updateProjectionMatrix();bg.position.copy(C.position);bg.scale.setScalar(C.far*.9/100);
+ tileUpdate(alt);
  if(!brPlaced)return;
  for(const c of CS){c.pos.copy(c.up).multiplyScalar(1.5+PU.lift.value+.00003);if(c.obj)c.obj.root.matrix.setPosition(c.pos);
   wp.copy(c.pos).applyMatrix4(G.matrixWorld);const d=C.position.distanceTo(wp);
   if(c.state==='idle'&&d<.16)load(c);if(c.state!=='idle'&&d>.3)unload(c);
-  if(c.obj){const a=ss(.1,.05,d),da=ss(.04,.022,d);c.obj.setFade(a,da);const inV=FR.intersectsSphere(SPH.set(wp,.03));c.active=inV&&d<.05;c.obj.root.visible=inV||d<.02;if(c.active)c.obj.tick(performance.now()/1000);
+  if(c.obj){const a=ss(.1,.05,d),da=ss(.04,.022,d);c.obj.setFade(a,da);const inV=FR.intersectsSphere(SPH.set(wp,.03));c.active=inV&&d<.05;c.obj.root.visible=inV||d<.02;if(c.active){c.obj.tick(performance.now()/1000);tileMesh.visible=false;}
    if(c.obj.inst){c.obj.root.updateMatrixWorld(true);for(const k of c.obj.inst.chunks){let v=false;if(c.active){CW.copy(k.c).applyMatrix4(c.obj.root.matrixWorld);const dd=C.position.distanceTo(CW);v=dd<(k.kind==='t'?.0065:.0055)+k.r*KM*10&&FR.intersectsSphere(SPH.set(CW,k.r*KM*10))}if(v&&!k.built){k.build();k.built=true}k.g.visible=v}}
    if(d<.02){c.obj.root.updateMatrixWorld(true);const Lc=c.obj.root.worldToLocal(C.position.clone());let h=c.obj.sAt?c.obj.sAt(Lc.x,Lc.z):0;const hx=c.obj.meta.WX/2,hz2=c.obj.meta.HZ/2;
     if(Math.abs(Lc.x)<hx&&Math.abs(Lc.z)<hz2)h=Math.max(h,c.obj.hAt(Lc.x,Lc.z));h=Math.max(h,0);if(Lc.y<h+.04){Lc.y=h+.04;C.position.copy(c.obj.root.localToWorld(Lc))}}
@@ -237,14 +238,53 @@ function amMake(f){const box=amBBox(f),canvas=amCanvas(f,box);const tex=new THRE
  const mesh=new THREE.Mesh(g,mat);mesh.frustumCulled=false;mesh.renderOrder=2;mesh.visible=false;G.add(mesh);return {mesh,fade,tex,g};}
 function amShow(f){let M=AM.get(f.name);if(!M){M=amMake(f);AM.set(f.name,M);}M.mesh.visible=true;M.fade.value=1;return M;}
 function amClear(){for(const M of AM.values())M.mesh.visible=false;}
+// Close-up terrain for every Americas country. Sentinel-2 cloudless tiles (Copernicus, CC BY 4.0, processed by EOX)
+// are fetched only for the patch in front of the camera, and only once the view is close enough to need them.
+let hdClose=false;function markHd(f,cont){if(f&&(f.name==='Brazil'||/America/.test(cont||'')))hdClose=true;}
+const TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/';
+const TILE_N=5,TILE_PX=TILE_N*256;
+const tileCache=new Map();const tileCanvas=document.createElement('canvas');tileCanvas.width=tileCanvas.height=TILE_PX;
+const tileTex=new THREE.CanvasTexture(tileCanvas);tileTex.colorSpace=THREE.SRGBColorSpace;tileTex.anisotropy=8;tileTex.generateMipmaps=false;tileTex.minFilter=THREE.LinearFilter;tileTex.magFilter=THREE.LinearFilter;
+const tileMat=new THREE.MeshBasicMaterial({map:tileTex,depthTest:false,depthWrite:false,toneMapped:false,transparent:true,side:THREE.DoubleSide});
+const tileMesh=new THREE.Mesh(new THREE.BufferGeometry(),tileMat);tileMesh.frustumCulled=false;tileMesh.renderOrder=4;tileMesh.visible=false;G.add(tileMesh);
+let tileKey='',tileStamp=0;
+function merc(lon,lat,z){const n=2**z;const x=(lon+180)/360*n;const lr=Math.max(-1.48,Math.min(1.48,lat*Math.PI/180));const y=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n;return {x,y,n};}
+function unmerc(x,y,z){const n=2**z;const lon=x/n*360-180;const t=Math.PI*(1-2*y/n);const lat=Math.atan(Math.sinh(t))*180/Math.PI;return [lon,lat];}
+function sphereHit(nx,ny){const v=new THREE.Vector3(nx,ny,.5).unproject(C);const o=C.position.clone(),d=v.sub(o).normalize();
+ const b=o.dot(d),c0=o.lengthSq()-2.25,disc=b*b-c0;if(disc<0)return null;const t=-b-Math.sqrt(disc);if(t<0)return null;
+ const w=o.addScaledVector(d,t).applyQuaternion(G.quaternion.clone().invert());
+ const lat=Math.asin(Math.max(-1,Math.min(1,w.y/1.5)))*180/Math.PI,lon=Math.atan2(w.x,w.z)*180/Math.PI;return {lon,lat};}
+function sepDeg(a,b){const la1=a.lat*Math.PI/180,lo1=a.lon*Math.PI/180,la2=b.lat*Math.PI/180,lo2=b.lon*Math.PI/180;
+ const c=Math.sin(la1)*Math.sin(la2)+Math.cos(la1)*Math.cos(la2)*Math.cos(lo1-lo2);return Math.acos(Math.max(-1,Math.min(1,c)))*180/Math.PI;}
+function viewDeg(){const L=sphereHit(-.85,0),Rgt=sphereHit(.85,0);if(L&&Rgt)return Math.max(.015,sepDeg(L,Rgt)/.85*1.25);
+ const dist=C.position.length(),beta=Math.acos(Math.min(1,1.5/Math.max(dist,1.50002)));return Math.max(.015,beta*2*180/Math.PI);}
+function tileZ(deg){return Math.max(4,Math.min(13,Math.floor(Math.log2(TILE_N*360/Math.max(.02,deg)))));}
+function tileGet(z,x,y){const n=2**z;x=(x%n+n)%n;y=Math.max(0,Math.min(n-1,y));const k=z+'/'+x+'/'+y;if(tileCache.has(k))return tileCache.get(k);
+ const rec={ok:false,im:new Image()};rec.im.crossOrigin='anonymous';rec.im.onload=()=>{rec.ok=true;tileStamp++;};rec.im.onerror=()=>{rec.bad=true;};
+ rec.im.src=TILE+z+'/'+y+'/'+x+'.jpg';tileCache.set(k,rec);if(tileCache.size>120){const first=tileCache.keys().next().value;tileCache.delete(first);}return rec;}
+function tilePaint(lon,lat,z){const t=merc(lon,lat,z),n=TILE_N,x0=Math.floor(t.x)-(n>>1),y0=Math.floor(t.y)-(n>>1),ctx=tileCanvas.getContext('2d'),cell=TILE_PX/n;
+ ctx.clearRect(0,0,TILE_PX,TILE_PX);let ready=0;for(let j=0;j<n;j++)for(let i=0;i<n;i++){const rec=tileGet(z,x0+i,y0+j);if(!rec.ok)continue;ctx.drawImage(rec.im,i*cell,j*cell,cell,cell);ready++;}
+ tileTex.needsUpdate=true;const nw=unmerc(x0,y0,z),se=unmerc(x0+n,y0+n,z);return {ready,lon0:nw[0],lat1:nw[1],lon1:se[0],lat0:se[1]};}
+function tileShape(b){const N=32,pos=[],uv=[],idx=[];
+ for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const u=i/N,v=j/N,lon=b.lon0+(b.lon1-b.lon0)*u,lat=b.lat1-(b.lat1-b.lat0)*v;
+  const la=lat*Math.PI/180,lo=lon*Math.PI/180;pos.push(Math.cos(la)*Math.sin(lo),Math.sin(la),Math.cos(la)*Math.cos(lo));uv.push(u,1-v);}
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){const a=j*(N+1)+i;idx.push(a,a+N+1,a+1,a+1,a+N+1,a+N+2);}
+ tileMesh.geometry.dispose();const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);tileMesh.geometry=g;}
+let tileBox=null;
+const TILE_R=1.5015;
+function tileUpdate(alt){const dist=C.position.length();if(!hdClose||alt>.22||dist<TILE_R+.0008){tileMesh.visible=false;return;}const hit=sphereHit(0,0);if(!hit){tileMesh.visible=false;return;}
+ const deg=viewDeg(),z=tileZ(deg),q=Math.max(4,2**(z-6)),key=z+':'+Math.round(hit.lon*q)+':'+Math.round(hit.lat*q);
+ if(key!==tileKey||tileStamp){const prev=tileStamp;tileStamp=0;tileBox=tilePaint(hit.lon,hit.lat,z);if(tileBox.ready){tileShape(tileBox);tileKey=key;}else tileStamp=prev?prev:1;}
+ const show=!!(tileBox&&tileBox.ready>=Math.min(4,TILE_N));
+ tileMesh.visible=show;if(show)tileMesh.scale.setScalar(TILE_R); }
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
- if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
+ markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
  const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
  if(/America/.test(cont||'')){const M=amShow(f);if(M){M.fade.value=0;await anim(700,x=>M.fade.value=ease(x));}return}
  fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
-function placeNow(f,cont){if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(/America/.test(cont||'')){amShow(f);return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
-function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;PU.rv.value=0;amClear();for(const c of CS)unload(c);}
+function placeNow(f,cont){markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(/America/.test(cont||'')){amShow(f);return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;hdClose=false;PU.rv.value=0;amClear();if(tileMesh)tileMesh.visible=false;for(const c of CS)unload(c);}
 let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
 // camera
 function camDist(){return C.position.distanceTo(O.target.lengthSq()>1?O.target.clone().multiplyScalar(0):O.target)}
@@ -254,7 +294,7 @@ function spinTo(c,zoom){const p0=C.position.clone(),d0=p0.length(),d1=zoom?Math.
  {const cd=p0.clone().normalize(),nU=new THREE.Vector3(0,1,0).applyQuaternion(q1).projectOnPlane(cd),cU=C.up.clone().projectOnPlane(cd);if(nU.lengthSq()>1e-6&&cU.lengthSq()>1e-6){nU.normalize();cU.normalize();
   const ang=Math.atan2(new THREE.Vector3().crossVectors(nU,cU).dot(cd),nU.dot(cU));q1.premultiply(new THREE.Quaternion().setFromAxisAngle(cd,ang));}}
  return anim(1000,x=>{const e=ease(x);G.quaternion.slerpQuaternions(q0,q1,e);C.position.setLength(d0+(d1-d0)*e)})}
-function zoomBy(k){const d=C.position.length();const nd=Math.min(O.maxDistance,Math.max(1.5+(d-1.5)/k,brPlaced?1.505:1.62));C.position.setLength(nd);}
+function zoomBy(k){const d=C.position.length();const nd=Math.min(O.maxDistance,Math.max(1.5+(d-1.5)/k,(brPlaced||hdClose)?1.505:1.62));C.position.setLength(nd);}
 const rc=new THREE.Raycaster(),mv=new THREE.Vector2(),SP=new THREE.Sphere(new THREE.Vector3(),1.5);
 function pick(x,y){const r=R.domElement.getBoundingClientRect();mv.set((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1);rc.setFromCamera(mv,C);const p=new THREE.Vector3();if(!rc.ray.intersectSphere(SP,p))return null;
  const q=p.normalize().applyQuaternion(G.quaternion.clone().invert());return [THREE.MathUtils.radToDeg(Math.atan2(q.x,q.z)),THREE.MathUtils.radToDeg(Math.asin(q.y))]}

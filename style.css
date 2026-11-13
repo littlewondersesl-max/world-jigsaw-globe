@@ -50,7 +50,7 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #aui line,#aui path{stroke:#f4f8ffd9;stroke-width:2;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 3px #0009)}
 #aui .ol{stroke:#ffe7a8;stroke-width:1.4;stroke-dasharray:5 4;fill:#ffe7a812;animation:olb 1s ease-in-out infinite}
 @keyframes olb{50%{opacity:.25}}
-#hdl{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(#fff,#cfd8e6);box-shadow:0 0 0 3px #ffffff40,0 2px 6px #000a;z-index:9;cursor:nwse-resize;touch-action:none}
+#hdl{position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:radial-gradient(#fff,#cfd8e6);box-shadow:0 0 0 3px #ffffff40,0 2px 6px #000a;z-index:30;cursor:nwse-resize;touch-action:none}
 
 #scrL{touch-action:pan-y;-webkit-overflow-scrolling:touch}
 
