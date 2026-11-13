@@ -247,10 +247,10 @@ function amMake(f,near){let polys=amPolys(f,near);const raw=amBBox(polys);if(raw
  const mesh=new THREE.Mesh(g,mat);mesh.frustumCulled=false;mesh.renderOrder=2;mesh.visible=false;G.add(mesh);return {mesh,fade,tex,g};}
 function amShow(f,near){let M=AM.get(f.name);if(!M){M=amMake(f,!!near);AM.set(f.name,M);}M.mesh.visible=true;M.fade.value=1;return M;}
 function amClear(){for(const M of AM.values())M.mesh.visible=false;}
-// Close-up terrain for the Americas, Europe and Africa. Sentinel-2 cloudless tiles (Copernicus, CC BY 4.0, processed by EOX)
+// Close-up terrain for every country. Sentinel-2 cloudless tiles (Copernicus, CC BY 4.0, processed by EOX)
 // are fetched only for the patch in front of the camera, and only once the view is close enough to need them.
-let hdClose=false;function hdRegion(cont){return /America|Europe|Africa/.test(cont||'');}
-function markHd(f,cont){if(f&&(f.name==='Brazil'||hdRegion(cont)))hdClose=true;}
+let hdClose=false;function hdRegion(){return true;}
+function markHd(f){if(f)hdClose=true;}
 const TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/';
 const TILE_N=5,TILE_PX=TILE_N*256;
 const tileCache=new Map();const tileCanvas=document.createElement('canvas');tileCanvas.width=tileCanvas.height=TILE_PX;

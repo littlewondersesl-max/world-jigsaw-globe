@@ -225,7 +225,6 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 .dR .din{border-left:0;border-top:8px solid #8a6a42}
 .dR .sec{overflow:hidden}
 .dR .sec .carve{color:#2a160c;background:#fff6e4ee;text-shadow:none;font:800 12px/1.15 system-ui,sans-serif;letter-spacing:0;top:4px;left:4px;right:4px;padding:3px 4px;border-radius:5px;white-space:normal;text-align:center;z-index:6}
-.dp .dname{position:absolute;left:50%;bottom:1px;transform:translateX(-50%);max-width:74px;padding:1px 4px;border-radius:4px;background:#fff8eef2;color:#1c120a;font:700 10px/1.15 system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;z-index:3;box-shadow:0 1px 2px #0006}
 @media(max-width:800px){
  main{flex-direction:row}
  #hudCol{width:132px}
