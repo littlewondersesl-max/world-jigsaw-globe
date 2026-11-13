@@ -70,27 +70,29 @@ const FACE_TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/defa
 const faceTiles=new Map();
 const sharpQ=[];let sharpBusy=0;
 function mercY(lat){const lr=Math.max(-1.48,Math.min(1.48,lat*Math.PI/180));return (1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2;}
-function sharpZ(span){const spanD=Math.max(span,.3);
- // Aim for about 1400 source pixels across the country, but keep the mosaic inside a 12-tile window.
- const zWant=Math.round(Math.log2(1400/spanD)),zFit=Math.floor(Math.log2(10*360/spanD));
- return Math.max(4,Math.min(12,zWant,zFit));}
+function sharpZ(span){const spanD=Math.max(span,.22);
+ // About 2800 source pixels across the country, still inside a tile window so the mosaic is not clipped.
+ const zWant=Math.ceil(Math.log2(2800/spanD)),zFit=Math.floor(Math.log2(11*360/spanD));
+ return Math.max(5,Math.min(13,zWant,zFit));}
 function loadTile(z,x,y){const n=2**z;x=(x%n+n)%n;y=Math.max(0,Math.min(n-1,y));const k=z+'/'+y+'/'+x;if(faceTiles.has(k))return faceTiles.get(k);
  const p=new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>res(null);im.src=FACE_TILE+k+'.jpg';});
  faceTiles.set(k,p);return p;}
 function wantSharp(f,first){if(!f||f._sharp)return;const i=sharpQ.indexOf(f);if(f._sharpWait){if(first&&i>0){sharpQ.splice(i,1);sharpQ.unshift(f);}return;}
  f._sharpWait=true;if(first)sharpQ.unshift(f);else sharpQ.push(f);pumpSharp();}
-function pumpSharp(){while(sharpBusy<2&&sharpQ.length){sharpBusy++;const f=sharpQ.shift();buildSharpFace(f).then(ok=>{f._sharpWait=false;if(ok){f._sharp=true;retint(f);}sharpBusy--;pumpSharp();});}}
+function pumpSharp(){if(carrying||drag){clearTimeout(pumpSharp.t);pumpSharp.t=setTimeout(pumpSharp,60);return;}while(sharpBusy<1&&sharpQ.length){sharpBusy++;const f=sharpQ.shift();buildSharpFace(f).then(ok=>{f._sharpWait=false;if(ok){f._sharp=true;retint(f);}sharpBusy--;pumpSharp();});}}
 async function buildSharpFace(f){const b=d3.geoBounds(f);let lon0=b[0][0],lon1=b[1][0],lat0=b[0][1],lat1=b[1][1];
  if(lon1-lon0>180){const mid=f.c[0];const shift=lon=>lon-mid>180?lon-360:mid-lon>180?lon+360:lon;lon0=shift(lon0);lon1=shift(lon1);if(lon1<lon0){const t=lon0;lon0=lon1;lon1=t;}}
  const span=Math.max(lon1-lon0,lat1-lat0,.25),z=sharpZ(span),n=2**z;
  const x0=Math.floor((lon0+180)/360*n)-1,x1=Math.ceil((lon1+180)/360*n)+1;
  const y0=Math.floor(mercY(lat1)*n)-1,y1=Math.ceil(mercY(lat0)*n)+1;
- const nx=Math.min(12,Math.max(1,x1-x0)),ny=Math.min(12,Math.max(1,y1-y0));
+ const nx=Math.min(14,Math.max(1,x1-x0)),ny=Math.min(14,Math.max(1,y1-y0));
  const cell=256,mos=document.createElement('canvas');mos.width=nx*cell;mos.height=ny*cell;const mx=mos.getContext('2d',{willReadFrequently:true});
  let got=0;const jobs=[];for(let j=0;j<ny;j++)for(let i=0;i<nx;i++)jobs.push(loadTile(z,x0+i,y0+j).then(im=>{if(im){mx.drawImage(im,i*cell,j*cell,cell,cell);got++;}}));
  await Promise.all(jobs);if(!got)return false;
  const faceB=f._face&&f._face.b;if(!faceB)return false;
- const bw=faceB[1][0]-faceB[0][0],bh=faceB[1][1]-faceB[0][1],FS=Math.round(Math.min(1792,1280*Math.min(2,window.devicePixelRatio||1)));
+ const bw=faceB[1][0]-faceB[0][0],bh=faceB[1][1]-faceB[0][1];
+ const srcPx=Math.max(480,span/360*n*256),dpr=Math.min(2,window.devicePixelRatio||1);
+ const FS=Math.round(Math.min(3072,Math.max(srcPx,Math.min(srcPx*dpr,3072))));
  const k=FS/Math.max(bw,bh),cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
  const c=document.createElement('canvas');c.width=cw;c.height=ch;const ctx=c.getContext('2d',{willReadFrequently:true});const id=ctx.createImageData(cw,ch),o=id.data;
  const l0=f.c[0]*Math.PI/180,p0=f.c[1]*Math.PI/180,sp=Math.sin(p0),cp=Math.cos(p0);
@@ -100,10 +102,13 @@ async function buildSharpFace(f){const b=d3.geoBounds(f);let lon0=b[0][0],lon1=b
   const xA=px|0,yA=py|0,tx=px-xA,ty=py-yA,at=(X,Y)=>{const i=(Y*mos.width+X)*4;return [md[i],md[i+1],md[i+2]];};
   const a=at(xA,yA),b2=at(Math.min(mos.width-1,xA+1),yA),c2=at(xA,Math.min(mos.height-1,yA+1)),e=at(Math.min(mos.width-1,xA+1),Math.min(mos.height-1,yA+1));
   return [0,1,2].map(q=>((a[q]*(1-tx)+b2[q]*tx)*(1-ty)+(c2[q]*(1-tx)+e[q]*tx)*ty)|0);};
- for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const X=faceB[0][0]+(i+.5)/k,Y=-(faceB[0][1]+(j+.5)/k),rr=X*X+Y*Y;if(rr>=1)continue;const zz=Math.sqrt(1-rr);
-  const lat=Math.asin(Math.max(-1,Math.min(1,zz*sp+Y*cp)))*180/Math.PI,lon=(l0+Math.atan2(X,zz*cp-Y*sp))*180/Math.PI;
-  const rgb=sample(lon,lat);if(!rgb)continue;const t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}
- ctx.putImageData(id,0,0);f._face={url:c.toDataURL('image/jpeg',.92),b:faceB,px:Math.max(cw,ch),sharp:true};return true;}
+ for(let j0=0;j0<ch;){while(carrying||drag) await new Promise(r=>setTimeout(r,40));
+  const j1=Math.min(ch,j0+8);
+  for(let j=j0;j<j1;j++)for(let i=0;i<cw;i++){const X=faceB[0][0]+(i+.5)/k,Y=-(faceB[0][1]+(j+.5)/k),rr=X*X+Y*Y;if(rr>=1)continue;const zz=Math.sqrt(1-rr);
+   const lat=Math.asin(Math.max(-1,Math.min(1,zz*sp+Y*cp)))*180/Math.PI,lon=(l0+Math.atan2(X,zz*cp-Y*sp))*180/Math.PI;
+   const rgb=sample(lon,lat);if(!rgb)continue;const t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}
+  j0=j1; if(j0<ch) await new Promise(r=>setTimeout(r,12));}
+ ctx.putImageData(id,0,0);f._face={url:c.toDataURL('image/jpeg',.93),b:faceB,px:Math.max(cw,ch),sharp:true};return true;}
 function retint(f){const url=f._face&&f._face.url;if(!url||!pieces)return;
  for(const p of pieces){if(p.f!==f)continue;
   for(const root of [p.el,p.ov,p.body&&p.body.el,(drag&&drag.p===p)?ghost:null]){if(!root)continue;root.querySelectorAll('image').forEach(im=>{if(im.getAttribute('href')!==url)im.setAttribute('href',url);});}
@@ -136,17 +141,17 @@ function renderTray(){const box=$('pieces');box.innerHTML='';const list=pieces.f
    d.addEventListener('pointerdown',e=>startDrag(e,p,d));box.appendChild(d);p.el=d;}
   if(i<list.length)requestAnimationFrame(step);};
  step();}
-function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.parked&&!(anc&&anc.p===p)&&!placed.has(p.f.name)){clearTimeout(setAngle.j);setAngle.j=setTimeout(()=>{if(p.parked&&!placed.has(p.f.name)&&fits(p,[p.lon,p.lat]))revealPlaced(p);},350);}// a correct turn can still snap a parked piece in, without taking rotate away afterwards
-if(p.ov)p.ov.firstChild.style.transform=`rotate(${p.angle}deg)`;if(anc&&anc.p===p&&anc.step==='rot'){clearTimeout(setAngle.t);setAngle.t=setTimeout(checkAnc,250);}if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;}
-function select(p){sel=p;if(p&&p.f)wantSharp(p.f,true);document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();}
+function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.parked&&!(anc&&anc.p===p)&&!placed.has(p.f.name))scheduleFit(p);
+if(p.ov)p.ov.firstChild.style.transform=`rotate(${p.angle}deg)`;if(anc&&anc.p===p&&anc.step==='rot'){clearTimeout(setAngle.t);setAngle.t=setTimeout(checkAnc,250);}if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(p.body&&p.body.el&&p.body.el.firstChild)p.body.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p&&ghost.firstChild)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;updPoseNote();}
+function select(p){const prev=sel&&sel.f&&sel.f.name;sel=p;if(p&&p.f)wantSharp(p.f,true);if(!p||p.f.name!==prev){const ht=$('hintText');if(ht)ht.textContent='';const m=$('msg');if(m)m.style.display='none';if(p&&tgtF&&tgtF.name!==p.f.name)showTarget(null);}document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();updPoseNote();}
 // drag
 let drag=null,ghost=null;
 function pieceScale(p){if(p.s==null)p.s=boxScale(p.f);return p.s;}
-function setScale(p,s){p.s=Math.max(.05,Math.min(8,s));if(drag&&drag.p===p)updateGhostShape();}
+function setScale(p,s){p.s=Math.max(.05,Math.min(8,s));if(drag&&drag.p===p)updateGhostShape();if(p.parked&&!(anc&&anc.p===p)&&!placed.has(p.f.name))scheduleFit(p);updPoseNote();}
 function updateGhostShape(){if(!drag)return;const sr=Math.max(G3.screenRadius(),1),gs=pieceScale(drag.p);const g=shapeSVG(drag.p.f,sr*gs);ghost.innerHTML=g.svg;let sv=ghost.firstChild,sz=2*g.r;
  if(sz<34){sv.setAttribute('width',34);sv.setAttribute('height',34);sz=34;}drag.half=sz/2;sv.style.transform=`rotate(${drag.p.angle}deg)`;moveGhost(drag.x,drag.y);}
 function moveGhost(x,y){drag.x=x;drag.y=y;ghost.style.left='0px';ghost.style.top='0px';ghost.style.transform=`translate3d(${x-drag.half}px,${y-drag.half}px,0)`;if(drag&&drag.p)tickFinderAt(drag.p,x,y);hiliteMach(x,y);}
-function startDrag(e,p,el){e.preventDefault();select(p);el.setPointerCapture(e.pointerId);drag={p,el,x:e.clientX,y:e.clientY,moved:false};
+function startDrag(e,p,el){e.preventDefault();drag={p,el,x:e.clientX,y:e.clientY,moved:false};select(p);el.setPointerCapture(e.pointerId);
  ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);ghost.style.display='none';updateGhostShape();
  el.onpointermove=ev=>{if(!drag)return;if(!drag.moved&&Math.hypot(ev.clientX-e.clientX,ev.clientY-e.clientY)>5){drag.moved=true;ghost.style.display='';el.style.opacity=.3;}moveGhost(ev.clientX,ev.clientY);};
  el.onpointerup=el.onpointercancel=ev=>{el.onpointermove=el.onpointerup=el.onpointercancel=null;const d=drag;drag=null;ghost.remove();el.style.opacity='';if(d.moved&&ev.type==='pointerup')window.__release(d.p,ev.clientX,ev.clientY);};}
@@ -163,7 +168,7 @@ function bounce(p){play('miss');if(p.el){p.el.animate([{transform:'translateX(-8
 const D2R=Math.PI/180,R2D=180/Math.PI;let parked=[],anc=null;const K=100;
 const layer=document.createElement('div');layer.id='park';document.body.appendChild(layer);
 let WOOD=null;fetch('wood.jpg').then(r=>r.blob()).then(b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)})).then(u=>WOOD=u);
-let pcN=0;function pcTex(p,g){const C=Math.min(2048,Math.max(1024,(p.f&&p.f._face&&p.f._face.px)||1024)),cid=(g.svg.match(/clipPath id="([^"]+)"/)||[])[1],svg=g.svg.replace('stroke="#2a170a"',`clip-path="url(#${cid})" stroke="#2a170a"`).replace(/^<svg /,'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ').replace(/width="[\d.]+" height="[\d.]+">/,`width="${C}" height="${C}">`)
+let pcN=0;function pcTex(p,g){const C=Math.min(3072,Math.max(1280,(p.f&&p.f._face&&p.f._face.px)||1280)),cid=(g.svg.match(/clipPath id="([^"]+)"/)||[])[1],svg=g.svg.replace('stroke="#2a170a"',`clip-path="url(#${cid})" stroke="#2a170a"`).replace(/^<svg /,'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ').replace(/width="[\d.]+" height="[\d.]+">/,`width="${C}" height="${C}">`)
   .replace('<defs>',`<defs><pattern id="wood" patternContentUnits="objectBoundingBox" width="1" height="1"><image href="${WOOD||'wood.jpg'}" width="1" height="1" preserveAspectRatio="none"/></pattern>`);
  const im=new Image();const pidAt=p.pid;im.onload=()=>{if(p.pid!==pidAt)return;const c=document.createElement('canvas');c.width=c.height=C;const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(im,0,0,C,C);
   // Keep only the country silhouette so a square mesh cannot paint a detached wood slab outside the shape.
@@ -175,16 +180,18 @@ function mkOverlay(p){if(p.pid)dropMesh(p);const o=document.createElement('div')
 function buildMesh(p){if(p.pid&&window.G3&&G3.pc.has(p.pid))return;p.pid=null;const g=shapeSVG(p.f,K);p.pid='pc'+(pcN++);p._h=g.r/K;p._ang=(g.m||g.r)/2/K;pcTex(p,g);}
 function park(p,ll,s){if(!p.parked){p.parked=true;parked.push(p);p.ov=mkOverlay(p);p.ov.addEventListener('pointerdown',e=>{select(p);if(placed.has(p.f.name)||anchorBlocked(p)){e.preventDefault();e.stopPropagation();return;}if(anc&&anc.p===p)return;startDrag(e,p,p.ov);});p.ov.addEventListener('wheel',e=>{e.preventDefault();e.stopPropagation();setAngle(p,p.angle+(e.deltaY>0?15:-15));},{passive:false});}
  p.el=p.ov;p.lon=ll[0];p.lat=ll[1];if(s!=null)p.s=s;renderTray();}
-function unpark(p){if(!p.parked)return;p.parked=false;dropMesh(p);parked=parked.filter(q=>q!==p);if(p.ov){p.ov.remove();p.ov=null;}}
+function unpark(p){if(!p.parked)return;p.parked=false;dropMesh(p);parked=parked.filter(q=>q!==p);if(p.ov){p.ov.remove();p.ov=null;}if(p._lab){p._lab.remove();p._lab=null;}}
 function boxScale(f){return trayScale(f)*86/88/Math.max(G3.screenRadius(),1);}
 function pieceEdited(p){return Math.abs((p.s||1)-1)>.03||Math.abs(angOff(p.angle))>3;}
 function posOv(p){const o=p.ov;if(!o)return;const show=!placed.has(p.f.name)||pieceEdited(p);
- G3.pc.set(p.pid,{lon:p.lon,lat:p.lat,s:p.s||1,a:p.angle,op:p.op??1,vis:show&&!(drag&&drag.p===p)});if(!G3.facing(p.lon,p.lat)){if(o._d!=='none'){o.style.display='none';o._d='none';}return}if(o._d!==''){o.style.display='';o._d='';}const [x,y]=G3.project(p.lon,p.lat);
- const k=G3.screenRadius()*(p.s||1)/K;const tf=`translate(${(x-o.r).toFixed(1)}px,${(y-o.r).toFixed(1)}px) scale(${k.toFixed(4)})`;if(o._tf!==tf){o.style.transform=tf;o._tf=tf;}o.style.opacity=show?'1':'0';o.style.pointerEvents=show&&!placed.has(p.f.name)?'auto':'none';p.sx=x;p.sy=y;p.spx=o.r*k;}
+ G3.pc.set(p.pid,{lon:p.lon,lat:p.lat,s:p.s||1,a:p.angle,op:p.op??1,vis:show&&!(drag&&drag.p===p)});if(!G3.facing(p.lon,p.lat)){if(o._d!=='none'){o.style.display='none';o._d='none';}if(p._lab)p._lab.style.display='none';return}if(o._d!==''){o.style.display='';o._d='';}const [x,y]=G3.project(p.lon,p.lat);
+ const k=G3.screenRadius()*(p.s||1)/K;const tf=`translate(${(x-o.r).toFixed(1)}px,${(y-o.r).toFixed(1)}px) scale(${k.toFixed(4)})`;if(o._tf!==tf){o.style.transform=tf;o._tf=tf;}o.style.opacity=show?'1':'0';o.style.pointerEvents=show&&!placed.has(p.f.name)?'auto':'none';p.sx=x;p.sy=y;p.spx=o.r*k;
+ if(!placed.has(p.f.name)&&show){o.classList.add('loose');if(!p._lab){p._lab=document.createElement('div');p._lab.className='looseLab';p._lab.textContent='Loose — drag me';document.body.appendChild(p._lab);}p._lab.style.display='';p._lab.style.left=x+'px';p._lab.style.top=(y-Math.max(28,o.r*k)-6)+'px';}
+ else {o.classList.remove('loose');if(p._lab)p._lab.style.display='none';}}
 let hdlReady=false;
 function editHandle(){if(!hdlReady)return;const p=sel&&sel.parked&&sel.spx?sel:null;if(!p){if(!(anc&&anc.step==='scale'))hdl.style.display='none';return;}
  hdl.style.display='';hdl.style.left=(p.sx+p.spx*.72)+'px';hdl.style.top=(p.sy+p.spx*.72)+'px';}
-(function loop(){if(window.G3){for(const p of parked)posOv(p);if(anc)ancUI();editHandle();}requestAnimationFrame(loop);})();
+(function loop(){if(window.G3){for(const p of parked)posOv(p);if(anc)ancUI();editHandle();tickTarget();}requestAnimationFrame(loop);})();
 // anchor UI
 const aui=document.createElementNS('http://www.w3.org/2000/svg','svg');aui.id='aui';document.body.appendChild(aui);
 const angOff=a=>{a=((a%360)+360)%360;return a>180?a-360:a};
@@ -217,7 +224,7 @@ const hdl=document.createElement('div');hdl.id='hdl';hdl.style.display='none';do
 hdl.addEventListener('pointerdown',e=>{const p=(sel&&sel.parked&&sel)||(anc&&anc.p);if(!p||p.sx==null)return;e.preventDefault();e.stopPropagation();select(p);hdl.setPointerCapture(e.pointerId);
  const cx=p.sx,cy=p.sy,d0=Math.hypot(e.clientX-cx,e.clientY-cy)||1,s0=pieceScale(p);
  hdl.onpointermove=ev=>{p.s=Math.max(.05,Math.min(8,s0*Math.hypot(ev.clientX-cx,ev.clientY-cy)/d0));};
- hdl.onpointerup=hdl.onpointercancel=()=>{hdl.onpointermove=hdl.onpointerup=hdl.onpointercancel=null;if(Math.abs((p.s||1)-1)<=.12)p.s=1;if(anc&&anc.p===p)checkAnc();};});
+ hdl.onpointerup=hdl.onpointercancel=()=>{hdl.onpointermove=hdl.onpointerup=hdl.onpointercancel=null;if(Math.abs((p.s||1)-1)<=.12)p.s=1;if(anc&&anc.p===p)checkAnc();else scheduleFit(p);updPoseNote();};});
 let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const x=p.sx,y=p.sy,R=p.spx;let h='';
  if(st==='scale'){const out=p.s<1,a=R*.75+14;for(const [dx,dy] of [[1,1],[-1,1],[1,-1],[-1,-1]]){const x1=x+dx*a*.62,y1=y+dy*a*.62,x2=x+dx*(a*.62+16),y2=y+dy*(a*.62+16);const [fx,fy,tx,ty]=out?[x1,y1,x2,y2]:[x2,y2,x1,y1];
    h+=`<line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" marker-end="url(#ah)"/>`;}
@@ -227,31 +234,74 @@ let olKey='';function ancUI(){const p=anc.p,st=anc.step;if(!p.spx){return}const 
  if(st==='lat'){const f=p.f;if(G3.facing(f.c[0],f.c[1])){const [ox,oy]=G3.project(f.c[0],f.c[1]);const sc=G3.screenRadius(),pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(sc).translate([ox,oy]).clipAngle(90);
    G3.outlineOp(.55+.45*Math.cos(performance.now()/160));const dy=oy-y;if(Math.abs(dy)>R*.5)h+=`<line x1="${x}" y1="${y+Math.sign(dy)*(R*.6)}" x2="${x}" y2="${y+Math.sign(dy)*(R*.6+22)}" marker-end="url(#ah)"/>`;}}
  if(aui._h!==h){aui._h=h;aui.innerHTML='<defs><marker id="ah" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker></defs>'+h;}}
-function placeTol(f){const rad=f.rad||.05,easy=$('easy')&&$('easy').checked;
- // A near miss in the sea still counts. Small countries get a wider halo. The halo stops short of a neighbour's centre.
- let tol=Math.max(.1,rad*.75);if(rad<.1)tol=Math.max(tol,.16);if(rad<.045)tol=Math.max(tol,.2);if(easy)tol=Math.min(.42,tol*1.35);
- let near=2;const list=pieces||[];for(const p of list){const o=p.f;if(!o||o===f||o.name===f.name)continue;const d=d3.geoDistance(f.c,o.c);if(d<near)near=d;}
- if(near<1.5)tol=Math.min(tol,Math.max(.08,near*.42));
- return tol;}
-function angTol(f){const easy=$('easy')&&$('easy').checked;return ((f.rad||.05)<.1?68:50)+(easy?14:0);}
-function countryAt(ll,skip){if(!ll||!pieces)return null;for(const p of pieces){const o=p.f;if(!o||o===skip||o.name===(skip&&skip.name))continue;if(d3.geoContains(o,ll))return o;}return null;}
-function nearPlace(f,ll){return d3.geoContains(f,ll)||(!countryAt(ll,f)&&d3.geoDistance(ll,f.c)<placeTol(f));}
-function aimed(p){return Math.abs(angOff(p.angle))<=angTol(p.f);}
-function fitState(p,ll){const f=p.f,tol=placeTol(f),dist=d3.geoDistance(ll,f.c),inside=d3.geoContains(f,ll),other=!inside&&countryAt(ll,f);
- const pos=inside||(!other&&dist<tol),almost=pos||(!other&&dist<tol*1.55)||(!!other&&dist<tol*1.2);
- if(pos&&aimed(p))return 'ok';if(pos&&!aimed(p))return 'angle';if(almost)return 'almost';return 'miss';}
-function fits(p,ll){return fitState(p,ll)==='ok';}
-function revealPlaced(p){if(!p||placed.has(p.f.name))return;p.s=1;if(Math.abs(angOff(p.angle))<=angTol(p.f))p.angle=0;place(p,true);}
-function joinParked(){if(MODE==='prov'&&provPending())return;let again=true;while(again){again=false;for(const q of [...parked]){if(anc&&anc.p===q)continue;if(!placed.has(q.f.name)&&fits(q,[q.lon,q.lat])){revealPlaced(q);again=true;}}}}
+// Footprint test: rasterise the true country and the dropped piece in the same local projection.
+// A snap needs about 90% of the country covered, at the right size and with north up. Any country, any time.
+function countryMask(f){if(f._mask)return f._mask;const N=96;
+ const pr0=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(1).translate([0,0]).clipAngle(89);
+ const b=d3.geoPath(pr0).bounds(f);const bw=Math.max(b[1][0]-b[0][0],1e-4),bh=Math.max(b[1][1]-b[0][1],1e-4);
+ const pad=.9,w=bw*(1+pad),h=bh*(1+pad),scale=N/Math.max(w,h),cx=(b[0][0]+b[1][0])/2,cy=(b[0][1]+b[1][1])/2;
+ const ox=N/2-cx*scale,oy=N/2-cy*scale;
+ const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(scale).translate([ox,oy]).clipAngle(89);
+ const c=document.createElement('canvas');c.width=c.height=N;const ctx=c.getContext('2d',{willReadFrequently:true});
+ const gp=d3.geoPath(pr,ctx);ctx.beginPath();gp(f);ctx.fillStyle='#fff';ctx.fill();
+ const im=ctx.getImageData(0,0,N,N).data,mask=new Uint8Array(N*N);let count=0;
+ for(let i=0;i<N*N;i++)if(im[i*4+3]>30){mask[i]=1;count++;}
+ return f._mask={mask,count,N,scale,ox,oy,pr0,bw,bh};}
+function coverage(f,ll,s,ang){const M=countryMask(f);if(!M.count||!ll)return 0;const xy=M.pr0(ll);if(!xy||!isFinite(xy[0])||!isFinite(xy[1]))return 0;
+ const cx=xy[0],cy=xy[1],rad=-(ang||0)*Math.PI/180,ca=Math.cos(rad),sa=Math.sin(rad),sc=Math.max(.05,s||1);
+ const {mask,N,scale,ox,oy}=M;let hit=0;
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){if(!mask[j*N+i])continue;const x=(i+.5-ox)/scale,y=(j+.5-oy)/scale,dx=x-cx,dy=y-cy;
+  const lx=(dx*ca-dy*sa)/sc,ly=(dx*sa+dy*ca)/sc,ii=(ox+lx*scale)|0,jj=(oy+ly*scale)|0;
+  if(ii>=0&&jj>=0&&ii<N&&jj<N&&mask[jj*N+ii])hit++;}
+ return hit/M.count;}
+function sizeBand(f){const tiny=(f.rad||.05)<.045,small=(f.rad||.05)<.09,easy=$('easy')&&$('easy').checked;
+ return {lo:(tiny?.62:small?.74:.8)-(easy?.06:0),hi:(tiny?1.55:small?1.38:1.24)+(easy?.08:0)};}
+function angBand(f){const tiny=(f.rad||.05)<.045,easy=$('easy')&&$('easy').checked;return (tiny?34:22)+(easy?8:0);}
+function coverCut(f){const tiny=(f.rad||.05)<.045,small=(f.rad||.05)<.09,easy=$('easy')&&$('easy').checked;return (tiny?.74:small?.84:.9)-(easy?.06:0);}
+function judge(p,ll){const f=p.f,s=pieceScale(p),ang=angOff(p.angle);
+ const atPose=coverage(f,ll,1,0),actual=coverage(f,ll,s,p.angle),cut=coverCut(f),band=sizeBand(f);
+ const sizeOk=s>=band.lo&&s<=band.hi,angOk=Math.abs(ang)<=angBand(f);
+ const dist=d3.geoDistance(ll,f.c),reach=Math.max((f.rad||.05)*((f.rad||.05)<.045?1.8:0.9),(f.rad||.05)<.045?.04:.015);
+ const place=atPose>=cut;
+ const pct=Math.round(Math.max(atPose,actual)*100);
+ if(place&&sizeOk&&angOk) return {ok:true,why:'ok',pct,atPose,actual};
+ if(place&&(!sizeOk||!angOk)) return {ok:false,why:!sizeOk&&!angOk?'both':!sizeOk?'size':'angle',bigger:s<1,pct,atPose,actual};
+ if(atPose>=.32||actual>=.32||dist<reach*1.6) return {ok:false,why:'almost',pct:Math.round(Math.max(atPose,actual)*100),atPose,actual,sizeOk,bigger:s<1,angOk};
+ return {ok:false,why:'miss',pct:Math.round(Math.max(atPose,actual)*100),atPose,actual};}
+function fits(p,ll){return judge(p,ll).ok;}
+function revealPlaced(p){if(!p||placed.has(p.f.name))return;place(p,true);}
+function scheduleFit(p){if(!p)return;clearTimeout(p._fitT);p._fitT=setTimeout(()=>{if(!p.parked||placed.has(p.f.name)||(anc&&anc.p===p))return;if(fits(p,[p.lon,p.lat]))snapIn(p);else updPoseNote();},280);}
+function snapIn(p){if(!p||placed.has(p.f.name))return;p.lon=p.f.c[0];p.lat=p.f.c[1];p.s=1;p.angle=0;if(p.ov){p.ov.classList.remove('loose');if(p.ov.firstChild)p.ov.firstChild.style.transform='rotate(0deg)';}if(p._lab){p._lab.remove();p._lab=null;}const ht=$('hintText');if(ht)ht.textContent='';revealPlaced(p);select(p);say(p.f.name+' placed',1800);}
+function joinParked(){if(MODE==='prov'&&provPending())return;let again=true;while(again){again=false;for(const q of [...parked]){if(anc&&anc.p===q)continue;if(!placed.has(q.f.name)&&fits(q,[q.lon,q.lat])){snapIn(q);again=true;}}}}
 function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||x>r.right||y<r.top||y>r.bottom)?null:G3.pick(x,y);
  if(!ll){if(p.parked){unpark(p);renderTray();}return;}
  if(anc&&anc.p===p)return;
  if(MODE==='prov'&&provPending()){park(p,ll,1);say('Finish the provinces of '+provPending()+' first',2400);return;}
- const st=fitState(p,ll);
- if(st==='ok'){if(!anchorName)anchorName=p.f.name;if(!p.parked)park(p,ll,1);else{p.lon=ll[0];p.lat=ll[1];}revealPlaced(p);select(p);say(p.f.name+' placed',1800);return;}
- park(p,ll,p.s!=null?p.s:boxScale(p.f));say(dropHint(p,st),2400);}
-function dropHint(p,st){const n=p.f.name;if(st==='angle')return 'Right place. Turn '+n+' so north is up.';if(st==='almost')return 'Almost — move '+n+' onto its country.';return 'Not on '+n+' yet.';}
-function place(p,inJoin){placed.add(p.f.name);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);if(p.parked)select(p);else sel=null;renderTray();updHints();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length))setTimeout(maybeWin,900);}
+ const j=judge(p,ll);
+ if(j.ok){if(!anchorName)anchorName=p.f.name;if(!p.parked)park(p,ll,pieceScale(p));snapIn(p);return;}
+ const hint=dropHint(p,j);
+ if(j.why==='miss'){if(p.parked)unpark(p);const W=innerWidth;addBody('L',p,40+Math.random()*(Math.max(80,W*.3)),50+Math.random()*(Math.max(80,innerHeight*.35)),true);renderTray();const st=document.getElementById('stack');if(st)st.animate([{transform:'scale(1)'},{transform:'scale(1.08)'},{transform:'scale(1)'}],{duration:280});say(hint+' Back in the stack — take it and try again.',4200);noteHint(hint);return;}
+ park(p,ll,pieceScale(p));if(p.ov)p.ov.classList.add('loose');
+ say(hint+' It is on the globe — drag it to fix it.',4200);noteHint(hint);}
+function dropHint(p,j){const n=p.f.name;const size=j.bigger?'make '+n+' bigger':'make '+n+' smaller';
+ if(j.why==='both')return 'Right place, '+size+', then turn it so north is up.';
+ if(j.why==='size')return 'Right place, '+size+'.';
+ if(j.why==='angle')return 'Right place, turn '+n+' so north is up.';
+ if(j.why==='almost'){let t='Almost: '+j.pct+'% covered, move it a bit.';if(j.sizeOk===false)t+=' Also '+size+'.';if(j.angOk===false)t+=' Turn it so north is up.';return t;}
+ return 'Not on '+n+' yet. '+j.pct+'% covered.';}
+function noteHint(t){const ht=$('hintText');if(ht)ht.textContent=t;}
+function poseNote(p){if(!p)return '';const s=pieceScale(p),n=p.f.name,a=Math.abs(angOff(p.angle)),bits=[];
+ if(a>18)bits.push(n+' is turned. Use ⟲ ⟳, or the Orientationator, so north is up.');
+ if(s<0.82)bits.push(n+' is too small for the globe. Drag the corner handle outward, or use the Sizeinator.');
+ else if(s>1.22)bits.push(n+' is too big for the globe. Drag the corner handle inward, or use the Sizeinator.');
+ return bits.join(' ');}
+function updPoseNote(){let n=$('poseNote');if(!n){const host=$('hintsBody')||$('hintText');if(!host)return;n=document.createElement('div');n.id='poseNote';const ht=$('hintText');if(ht&&ht.parentNode)ht.parentNode.insertBefore(n,ht);else host.appendChild(n);}n.textContent=sel?poseNote(sel):'';}
+let tgtF=null;const tgtRing=document.createElement('div');tgtRing.id='tgtRing';document.body.appendChild(tgtRing);
+function showTarget(f){tgtF=f||null;if(!tgtF){tgtRing.style.display='none';if(window.G3&&G3.holdTarget)G3.holdTarget(null);return;}if(window.G3&&G3.holdTarget)G3.holdTarget(tgtF);}
+function tickTarget(){if(!tgtF||!window.G3){tgtRing.style.display='none';return;}if(!G3.facing(tgtF.c[0],tgtF.c[1])){tgtRing.style.display='none';return;}
+ const [x,y]=G3.project(tgtF.c[0],tgtF.c[1]),rad=Math.max(28,G3.screenRadius()*Math.max(tgtF.rad||.04,.035));
+ tgtRing.style.display='block';tgtRing.style.left=x+'px';tgtRing.style.top=y+'px';tgtRing.style.width=tgtRing.style.height=(rad*2)+'px';}
+function place(p,inJoin){if(tgtF&&p.f&&tgtF.name===p.f.name)showTarget(null);placed.add(p.f.name);if(p._lab){p._lab.remove();p._lab=null;}if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);if(p.parked)select(p);else sel=null;renderTray();updHints();updPoseNote();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length))setTimeout(maybeWin,900);}
 function anchorBlocked(p){return !!(p&&((anc&&anc.p===p)||(anchorName&&p.f.name===anchorName)));}
 function repaintPlaced(){if(!window.G3)return;G3.clear();for(const n of placed){const f=byName[n];if(!f)continue;if(MODE==='prov')G3.fog(f);else G3.placeNow(f,(FACTS[n]||[''])[0]);}
  if(MODE==='prov'&&GEOP){for(const n of placed)for(const pf of (GEOP.PV[n]||[]))if(provPlaced.has(provKey(pf)))G3.provNow(pf,(FACTS[n]||[''])[0]);}}
@@ -315,11 +365,11 @@ $('card').querySelector('.cardIn').addEventListener('click',e=>e.stopPropagation
 })();
 // hints
 function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used: ${p.hint}/3`:'Tap the stack to draw a piece.';
- ['h1','h2','h3'].forEach((h,i)=>$(h).disabled=!p||p.hint<i);if(!p)$('hintText').textContent='';}
+ ['h1','h2','h3'].forEach((h,i)=>$(h).disabled=!p||p.hint<i);if(!p){const ht=$('hintText');if(ht)ht.textContent='';updPoseNote();}}
 $('h1').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,1);setAngle(p,0);$('hintText').innerHTML='⬆️ This way is UP (north). I turned the piece for you!';updHints();};
 $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=p.f.name,f=FACTS[n],nb=(neigh[n]||[]);
  $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${f[5]}`;updHints();};
-$('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c,Math.max(1.4,Math.min(3,6.2/(1+19*p.f.rad))));G3.pulse(p.f,5000);$('hintText').innerHTML+='<br>✨ Look for the yellow glow!';updHints();};
+$('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c);showTarget(p.f);$('hintText').textContent='The yellow ring stays on '+p.f.name+' until you place it or pick another piece. The whole globe stays in view.';updHints();updPoseNote();};
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';};
 const SETVIEW={Africa:[20,2],Asia:[90,30],Europe:[15,50],Americas:[-80,8],Oceania:[150,-25]};
 let setPrev=$('set').value;$('set').onchange=e=>{if((placed.size||parked.length)&&!confirm('Start a new puzzle? The pieces you have placed will be cleared.')){e.target.value=setPrev;return;}setPrev=e.target.value;buildSet();const v=SETVIEW[e.target.value];if(v)spinTo(v,1);};// face the chosen region instead of leaving the old view
@@ -475,7 +525,7 @@ function release(p,x,y,vx,vy){hiliteMach(-1,-1);vx=vx||0;vy=vy||0;
  syncDrawers();}
 window.__release=release;
 // carry: piece follows the pointer. A drag releases on lift; a click/tap keeps it on the cursor until the next click/tap.
-let carrying=null;function carry(p,e,src){if(carrying)return;select(p);if(p.body)p.body.el.style.visibility='hidden';remSpace(p);
+let carrying=null;function carry(p,e,src){if(carrying)return;carrying=p;select(p);if(p.body)p.body.el.style.visibility='hidden';remSpace(p);
  drag={p,el:src,x:e.clientX,y:e.clientY,moved:true,hist:[{t:performance.now(),x:e.clientX,y:e.clientY}]};ghost=document.createElement('div');ghost.id='ghost';document.body.appendChild(ghost);updateGhostShape();moveGhost(e.clientX,e.clientY);
  const x0=e.clientX,y0=e.clientY,t0=performance.now();let downs=0,hd=0;carrying=p;if(window.G3&&G3.O)G3.O.enabled=false;
  const mv=ev=>{if(!drag)return;moveGhost(ev.clientX,ev.clientY);const h=drag.hist;h.push({t:performance.now(),x:ev.clientX,y:ev.clientY});if(h.length>8)h.shift();},
@@ -882,7 +932,7 @@ addEventListener('keydown',e=>{if(e.key!=='Escape')return;
 {const mb=document.createElement('button');mb.id='pauseB';mb.textContent='Pause / Save / Load (Esc)';$('menuL').prepend(mb);mb.onclick=()=>{$('menuL').hidden=true;$('menuB').setAttribute('aria-expanded',false);openPause();};}
 Object.assign(window.__game,{saveGame,loadGame,snapshot,readSave,openPause,openStart,startGame,placeProv,provLeft,provMainland,provOverseas,applyFinder,finderPct,runMachine,enableFinder,machineAt,beginMachineRun,burstCoinsAt,spawnPlaceCoins,coinTreePx,setCoins,addCoins,addSpace,remSpace,enterOrbit,recallOrbiters,orbiters,isUiBlocked,dismissCard,showPlaceTab,openCountryCard,updCountriesUI,hidePlaceTab,collectAllCoins:()=>{while(freeCoins.length){const c=freeCoins.pop();c.el.remove();addCoins(1);}}});Object.defineProperty(window.__game,'coins',{get:()=>coins});Object.defineProperty(window.__game,'freeCoins',{get:()=>freeCoins.length});Object.defineProperty(window.__game,'provFind',{get:()=>provFind});Object.defineProperty(window.__game,'GEOP',{get:()=>GEOP});Object.defineProperty(window.__game,'mode',{get:()=>MODE});Object.defineProperty(window.__game,'provOpen',{get:()=>provOpen});Object.defineProperty(window.__game,'provPlaced',{get:()=>provPlaced});
 addEventListener('gameready',()=>{if(!/[?&]play\b/.test(location.search))openStart();});Object.defineProperty(window.__game,'pause',{get:()=>!pz.hidden});
-Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack,addBody,unplace,claimPiece,layoutChrome,select});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});Object.defineProperty(window.__game,'anchorName',{get:()=>anchorName});
+Object.assign(window.__game,{DR,setOpen:(o,v)=>{o.glide=0;setOpen(o,v)},carry,release,drawStack,addBody,unplace,claimPiece,layoutChrome,select,judge});Object.defineProperty(window.__game,'carrying',{get:()=>carrying});Object.defineProperty(window.__game,'anchorName',{get:()=>anchorName});
 addEventListener('resize',()=>{layoutSecs();});layoutChrome();
 })();
 (function(){const B=document.getElementById('menuB'),L=document.getElementById('menuL'),P=document.getElementById('credP');if(!B)return;

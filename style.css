@@ -45,6 +45,10 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 
 #park{position:fixed;inset:0;pointer-events:none;z-index:5}
 .pk{position:absolute;left:0;top:0;transform-origin:center;pointer-events:auto;cursor:grab;touch-action:none}
+.pk.loose{filter:drop-shadow(0 0 10px #ffe14a)}
+.looseLab{position:fixed;transform:translate(-50%,-100%);background:#fff8dc;color:#1a1206;font:700 13px/1.2 system-ui,sans-serif;padding:4px 8px;border-radius:9px;pointer-events:none;z-index:8;box-shadow:0 2px 8px #0008;white-space:nowrap}
+#poseNote{font:600 13px/1.35 system-ui,sans-serif;color:#ffe7a3;margin:0 0 6px}#poseNote:empty{display:none}
+#tgtRing{position:fixed;border:3px solid #ffe14a;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:6;box-shadow:0 0 0 5px #ffe14a33,0 0 18px #ffe14a;display:none}
 .pk svg{width:100%;height:100%;opacity:0;pointer-events:none}
 #aui{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:8;overflow:visible}
 #aui line,#aui path{stroke:#f4f8ffd9;stroke-width:2;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 3px #0009)}

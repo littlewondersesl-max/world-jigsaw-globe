@@ -295,13 +295,17 @@ function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
 function placeNow(f,cont){markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(hdRegion(cont)){amShow(f,/Europe|Africa/.test(cont||''));return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
 function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;hdClose=false;PU.rv.value=0;amClear();if(tileMesh)tileMesh.visible=false;for(const c of CS)unload(c);}
-let pulseEnd=0;function pulse(f,ms){fctx.clearRect(0,0,2048,1024);const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=6;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;LU.pm.value=1;pulseEnd=performance.now()+ms;}
+let pulseEnd=0,heldTarget=false;
+function paintMark(f){fctx.clearRect(0,0,2048,1024);if(!f){freshT.needsUpdate=true;return;}const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=8;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;}
+function pulse(f,ms){paintMark(f);LU.pm.value=1;pulseEnd=performance.now()+(ms||5000);}
+function holdTarget(f){if(!f){heldTarget=false;pulseEnd=0;LU.pm.value=0;LU.pa.value=0;paintMark(null);outline(null);return;}heldTarget=true;paintMark(f);LU.pm.value=1;pulseEnd=1e15;}
 // camera
 function camDist(){return C.position.distanceTo(O.target.lengthSq()>1?O.target.clone().multiplyScalar(0):O.target)}
 function spinCalm(){O.target.set(0,0,0);C.up.set(0,1,0);O.maxPolarAngle=Math.PI;O.minPolarAngle=0;
  if(O._sphericalDelta)O._sphericalDelta.set(0,0,0);if(O._panOffset)O._panOffset.set(0,0,0);
  if(O._quat)O._quat.identity();if(O._quatInverse)O._quatInverse.identity();}
-function spinTo(c,zoom){const dWant=zoom?Math.max(1.75,6.2/zoom):C.position.length(),d1=Math.min(O.maxDistance||12,Math.max(3.5,dWant));
+function globeFitDist(){const half=THREE.MathUtils.degToRad(C.fov*0.5)*0.8;return Math.min(O.maxDistance||12,1.5/Math.sin(half));}
+function spinTo(c,zoom){const fit=globeFitDist(),dWant=zoom?Math.max(1.75,6.2/zoom):C.position.length(),d1=Math.min(O.maxDistance||12,Math.max(fit,dWant));
  const from=C.position.clone(),to=new THREE.Vector3(0,.22,1).setLength(d1);spinCalm();
  // Turn the globe, and park the camera on a steady view, so the country faces the player and the globe stays in frame.
  const q0=G.quaternion.clone(),cur=sv(c[0],c[1]).applyQuaternion(q0),q1=new THREE.Quaternion().setFromUnitVectors(cur,to.clone().normalize()).multiply(q0);
@@ -322,7 +326,7 @@ addEventListener('pointermove',e=>{if(!grab||e.pointerId!==grab.id)return;const 
  UPV.copy(C.up).normalize();RT.setFromMatrixColumn(C.matrixWorld,0);GQ.setFromAxisAngle(UPV,dx*k);G.quaternion.premultiply(GQ);GQ.setFromAxisAngle(RT,dy*k);G.quaternion.premultiply(GQ);});
 const endGrab=e=>{if(grab&&e.pointerId===grab.id){grab=null;O.enabled=true}};addEventListener('pointerup',endGrab);addEventListener('pointercancel',endGrab);
 addEventListener('resize',resize);resize();
-R.setAnimationLoop(now=>{U.t.value=now/1000;anims=anims.filter(a=>!a(now));if(LU.pm.value>.5){LU.pa.value=now<pulseEnd?.35+.35*Math.sin(now/150):0;if(now>=pulseEnd){LU.pm.value=0;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true}}
+R.setAnimationLoop(now=>{U.t.value=now/1000;anims=anims.filter(a=>!a(now));if(LU.pm.value>.5){if(heldTarget)LU.pa.value=.62+.34*Math.sin(now/180);else if(now<pulseEnd)LU.pa.value=.35+.35*Math.sin(now/150);else{LU.pm.value=0;LU.pa.value=0;paintMark(null);}}
  O.update();lod();if(skyNear.visible)sunBoard.lookAt(C.position);labels();R.render(S,C);});
 function setBg(i){U.bg.value=i;skyNear.visible=i<0.5;}
 const KMv=KM;function zoomRio(alt){const c=CS[0];const n=c.up.clone().applyQuaternion(G.quaternion);const T=n.clone().multiplyScalar(1.5+PU.lift.value);if(alt>=.06){O.target.set(0,0,0);C.position.copy(n.multiplyScalar(1.5+alt));C.lookAt(0,0,0);return}
@@ -386,5 +390,5 @@ function pickPiece(x,y){G.updateMatrixWorld(true);const r=R.domElement.getBoundi
   if(alphaAt(h.object,h.uv)<16)continue;return h.object.userData.pid||null;}
  return null;}
 function viewDirLocal(){const w=C.position.clone().normalize().applyQuaternion(G.quaternion.clone().invert());return {x:w.x,y:w.y,z:w.z};}
-window.G3={fog:fogNow,provNow,pc:{add:pcAdd,set:pcSet,del:pcDel,has:pcHas,info:pcInfo},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),setQuat:q=>{G.quaternion.fromArray(q);G.updateMatrixWorld();},cam:()=>({p:C.position.toArray(),t:O.target.toArray()}),setCam:c=>{C.position.fromArray(c.p);O.target.fromArray(c.t);O.update();},project,pieceView,reveal,placeNow,clear,pulse,spinTo,zoomBy,pick,screenRadius,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},sampleBox,pickPiece,viewDirLocal,C,O};
+window.G3={fog:fogNow,provNow,pc:{add:pcAdd,set:pcSet,del:pcDel,has:pcHas,info:pcInfo},outline,outlineOp,offsetLon,facing,labels:on=>{lblBox.hidden=!on},grabbing:()=>!!grab,quat:()=>G.quaternion.toArray(),setQuat:q=>{G.quaternion.fromArray(q);G.updateMatrixWorld();},cam:()=>({p:C.position.toArray(),t:O.target.toArray()}),setCam:c=>{C.position.fromArray(c.p);O.target.fromArray(c.t);O.update();},project,pieceView,reveal,placeNow,clear,pulse,holdTarget,spinTo,zoomBy,pick,screenRadius,globeFitDist,setBg,doosh,zoomRio,dom:R.domElement,cityState:()=>CS.map(c=>c.state),alt:()=>(C.position.length()-1.5)/KMv,shot:()=>{O.update();lod();R.render(S,C);return R.domElement.toDataURL('image/jpeg',.85)},sampleBox,pickPiece,viewDirLocal,C,O};
 window.dispatchEvent(new Event('g3ready'));
