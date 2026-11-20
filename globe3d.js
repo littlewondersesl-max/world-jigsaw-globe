@@ -3,7 +3,7 @@
 // (towns, trees, rivers) and drops it again when you zoom out. Rio's hand-built model still loads up close.
 import * as THREE from 'three';
 import {OrbitControls} from './previews/brazil/OrbitControls.js';import {loadCity} from './previews/lib/city.js';import {CITIES} from './previews/lib/cities.js';
-import {attachSADetail} from './detail/sa-detail.js?v=sa17';
+import {attachSADetail} from './detail/sa-detail.js?v=sa20';
 const P='previews/brazil/';
 const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});R.setPixelRatio(Math.min(1.5,devicePixelRatio));
 R.toneMapping=THREE.ACESFilmicToneMapping;R.domElement.id='globe';host.prepend(R.domElement);

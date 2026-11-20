@@ -296,35 +296,57 @@ export function attachSADetail(THREE, api) {
       uniform vec2 ctr;
       uniform vec3 sun;
       varying vec3 vWp; varying vec2 vLL;
+      int idOf(vec2 uv){ return int(texture2D(ids, clamp(uv,0.001,0.999)).r*255.0+0.5); }
+      bool placedId(int id){
+        if(id<=0) return false;
+        if(id==3) return br>0.5;
+        return on[id]>0.5;
+      }
       void main(){
         vec2 uvS=vec2((vLL.x-bbS.x)/(bbS.z-bbS.x),(vLL.y-bbS.y)/(bbS.w-bbS.y));
-        float id=texture2D(ids, clamp(uvS,0.001,0.999)).r*255.0;
-        int k=int(id+0.5);
-        if(k==0) discard;
-        if(k==3){ if(br<0.5) discard; }
-        else if(on[k]<0.5) discard;
+        int k=idOf(uvS);
         if(rioOn>0.45 && vLL.x>rioB.x && vLL.x<rioB.z && vLL.y>rioB.y && vLL.y<rioB.w) discard;
-        vec2 tuv=vec2((vLL.x-satBox.x)/(satBox.z-satBox.x),(vLL.y-satBox.y)/(satBox.w-satBox.y));
-        vec3 raw;
         if(satOn<0.5) discard;
+        vec2 tuv=vec2((vLL.x-satBox.x)/(satBox.z-satBox.x),(vLL.y-satBox.y)/(satBox.w-satBox.y));
         float tileEdge=min(min(tuv.x, 1.0-tuv.x), min(tuv.y, 1.0-tuv.y));
         if(tileEdge<=0.0) discard;
-        raw=texture2D(sat, tuv).rgb;
+        vec3 raw=texture2D(sat, tuv).rgb;
         if(dot(raw, vec3(1.0))<0.004) discard;
-        vec3 mp=pow(raw, vec3(2.2));
-        float l=dot(mp, vec3(0.28,0.40,0.26));
-        mp=mix(vec3(l), mp, 1.15);
+        // The country mask is a few kilometres per pixel, so it stair-steps the shore.
+        // Keep a thin fringe around a placed country and let the photo's own blue water draw the coast.
+        bool placed=placedId(k);
+        bool nearPlaced=placed;
+        bool nearOcean=(k==0);
+        vec2 px=vec2(1.0/1325.0, 1.0/2048.0);
+        for(int s=1;s<=3;s++){
+          float o=float(s);
+          int a=idOf(uvS+vec2(px.x*o,0.0)); int b=idOf(uvS+vec2(-px.x*o,0.0));
+          int c=idOf(uvS+vec2(0.0,px.y*o)); int d=idOf(uvS+vec2(0.0,-px.y*o));
+          if(a==0||b==0||c==0||d==0) nearOcean=true;
+          if(placedId(a)||placedId(b)||placedId(c)||placedId(d)) nearPlaced=true;
+        }
+        // The tile is sampled in linear light. Ocean is the pixel that is clearly bluer than it is red.
+        bool water=raw.b>raw.r*1.45 && raw.g<raw.b*2.1 && raw.r<0.15 && raw.b>0.015;
+        if(water && (k==0 || nearOcean)) discard;
+        if(!nearPlaced) discard;
+        // One daylight grade for every region. The photo is linear; this opens the shadows and holds the highlights.
+        float lum=dot(raw, vec3(0.30,0.50,0.20));
+        float sh=1.0-smoothstep(0.01, 0.055, lum);
+        vec3 x=raw*mix(1.35, 3.8, sh);
+        vec3 col=(x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14);
+        float y=dot(col, vec3(0.28,0.55,0.17));
+        col=mix(vec3(y), col, 1.12);
         vec3 n=normalize(cross(dFdx(vWp), dFdy(vWp)));
         float nd=dot(n, normalize(sun));
-        float hill=0.64+0.52*smoothstep(-0.4,0.85,nd);
-        vec3 col=mp*hill;
+        float hill=0.96+0.14*smoothstep(-0.15,0.8,nd);
+        col*=hill;
         float edge=max(abs(vLL.x-ctr.x), abs(vLL.y-ctr.y))/max(span,0.05);
         float fade=min(smoothstep(1.0, 0.45, edge), smoothstep(0.0, 0.16, tileEdge));
         if(fade<0.97){
           float hsh=fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)))*43758.5453);
           if(hsh>fade) discard;
         }
-        gl_FragColor=vec4(pow(col, vec3(1.0/2.2)), 1.0);
+        gl_FragColor=vec4(pow(clamp(col,0.0,1.0), vec3(1.0/2.2)), 1.0);
       }`
   });
   mats.patch.userData.u = patchU;
