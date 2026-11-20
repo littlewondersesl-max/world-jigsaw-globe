@@ -388,7 +388,8 @@ $('h1').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,1);setAngle
 $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=p.f.name,f=FACTS[n],nb=(neigh[n]||[]);
  $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${f[5]}`;updHints();};
 $('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c);showTarget(p.f);$('hintText').textContent='The yellow ring stays on '+p.f.name+' until you place it or pick another piece. The whole globe stays in view.';updHints();updPoseNote();};
-$('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';};
+let natureOn=true;
+$('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';if(window.G3&&G3.setNatureMute)G3.setNatureMute(muted);};
 const SETVIEW={Africa:[20,2],Asia:[90,30],Europe:[15,50],Americas:[-80,8],Oceania:[150,-25]};
 let setPrev=$('set').value;$('set').onchange=e=>{if((placed.size||parked.length)&&!confirm('Start a new puzzle? The pieces you have placed will be cleared.')){e.target.value=setPrev;return;}setPrev=e.target.value;buildSet();const v=SETVIEW[e.target.value];if(v)spinTo(v,1);};// face the chosen region instead of leaving the old view
 $('bg').onchange=e=>G3.setBg(+e.target.value);$('lbl').onchange=e=>G3.labels(e.target.checked);
@@ -911,7 +912,7 @@ async function startGame(mode,set){sm.querySelectorAll('button').forEach(b=>b.di
 function openStart(){cancelHeld&&cancelHeld();smMain();sm.hidden=false;machWrap.hidden=true;if(pouchWrap)pouchWrap.hidden=true;}
 // ---------- pause menu + save / load (localStorage) ----------
 const SAVE_KEY='worldJigsaw.save.v1';
-function snapshot(){return {v:5,t:Date.now(),coins,mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted},
+function snapshot(){return {v:5,t:Date.now(),coins,mode:MODE,provPlaced:[...provPlaced],provOpen:[...provOpen],provFind:Object.assign({},provFind),set:$('set').value,opts:{easy:$('easy').checked,lbl:$('lbl').checked,bg:$('bg').value,muted,nature:natureOn},
  quat:G3.quat(),cam:G3.cam(),drawers:{L:DR.L.open,R:DR.R.open},placed:[...placed],anchorName,anc:anc?{n:anc.p.f.name,step:anc.step}:null,
  pieces:pieces.map(p=>{const o={n:p.f.name,angle:p.angle,hint:p.hint};if(p.finder)o.finder=JSON.parse(JSON.stringify(p.finder));if(p.finderLost)o.finderLost=true;if(placed.has(p.f.name))o.st='placed';else if(p.parked){o.st='parked';o.lon=p.lon;o.lat=p.lat;o.s=p.s;}
   else if(p.space){const s=p.space;o.st='space';o.smode=s.mode;o.orb={ux:s.ux,uy:s.uy,uz:s.uz,vx:s.vx,vy:s.vy,vz:s.vz,ang:s.ang,angV:s.angV,rad:s.rad,drawS:s.drawS,mode:s.mode};}
@@ -923,6 +924,7 @@ function cancelHeld(){if(carrying){dispatchEvent(new KeyboardEvent('keydown',{ke
  if(drag){const d=drag;d.el.onpointermove=d.el.onpointerup=d.el.onpointercancel=null;drag=null;ghost.remove();d.el.style.opacity='';return true}return false}
 async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();for(const p of (pieces||[]))remSpace(p);document.querySelectorAll('.ride').forEach(e=>e.remove());sm.hidden=true;machWrap.hidden=false;if(pouchWrap)pouchWrap.hidden=false;setCoins(S.coins|0);const md=S.mode||'countries';if(md==='prov')await loadProvGeo();setMode(md);$('card').hidden=true;$('flagPop').hidden=true;
  const o=S.opts||{};$('easy').checked=!!o.easy;$('lbl').checked=o.lbl!==false;G3.labels($('lbl').checked);$('bg').value=o.bg||'0';G3.setBg(+$('bg').value);muted=!!o.muted;$('mute').textContent=muted?'🔇':'🔊';
+ natureOn=o.nature!==false;if(G3.setNature)G3.setNature(natureOn);if(G3.setNatureMute)G3.setNatureMute(muted);const nz=$('pzNature');if(nz)nz.checked=natureOn;
  $('set').value=S.set;setPrev=S.set;buildSet();
  const byN={};for(const p of pieces)byN[p.f.name]=p;pieces=S.pieces.map(q=>{const p=byN[q.n];p.angle=q.angle;p.hint=q.hint||0;p.finder=q.finder?JSON.parse(JSON.stringify(q.finder)):null;p.finderLost=!!q.finderLost;return p}).filter(Boolean);
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;
@@ -938,11 +940,12 @@ async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();for(const 
  DR.L.glide=DR.R.glide=0;DR.L.open=Math.max(0,Math.min(innerWidth-44,S.drawers.L||0));DR.R.open=Math.max(0,Math.min(boardBox().h,S.drawers.R||0));for(const s in DR){DR[s].pv=DR[s].open;DR[s].v=0;}
  sel=null;renderTray();for(const s in DR)for(const b of DR[s].bodies){b.vx=b.vy=0;}
  if(S.cam)G3.setCam(S.cam);updHints();progress();hidePlaceTab();closeCountriesDrop();updCountriesUI();updOrbitUI();kick();toast('Game loaded');return true;}
-const pz=document.createElement('div');pz.id='pause';pz.hidden=true;pz.innerHTML='<div class="pb"><h3>Paused</h3><button id="pzRes">Resume</button><button id="pzSave">Save game</button><button id="pzLoad">Load saved game</button><div id="pzInfo"></div></div>';document.body.appendChild(pz);
+const pz=document.createElement('div');pz.id='pause';pz.hidden=true;pz.innerHTML='<div class="pb"><h3>Paused</h3><button id="pzRes">Resume</button><button id="pzSave">Save game</button><button id="pzLoad">Load saved game</button><label class="nz"><input type="checkbox" id="pzNature" checked> Nature sounds up close</label><div id="pzInfo"></div></div>';document.body.appendChild(pz);
+$('pzNature').onchange=()=>{natureOn=$('pzNature').checked;if(window.G3&&G3.setNature)G3.setNature(natureOn);};
 const tst=document.createElement('div');tst.id='toast';document.body.appendChild(tst);
 function toast(t){tst.textContent=t;tst.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>tst.classList.remove('on'),1800);}
 function updPause(){const S=readSave();$('pzLoad').disabled=!S;$('pzInfo').textContent=S?'Saved: '+new Date(S.t).toLocaleString()+' · '+S.placed.length+' placed':'No saved game yet';}
-function openPause(){cancelHeld();updPause();pz.hidden=false;$('pzRes').focus({preventScroll:true});}
+function openPause(){cancelHeld();updPause();const nz=$('pzNature');if(nz)nz.checked=natureOn;pz.hidden=false;$('pzRes').focus({preventScroll:true});}
 function closePause(){pz.hidden=true;}
 $('pzRes').onclick=closePause;$('pzSave').onclick=()=>{saveGame();};
 $('pzLoad').onclick=async()=>{const S=readSave();if(!S)return;if((placed.size||parked.length||anc)&&!confirm('Load your saved game? Your current progress will be replaced.'))return;closePause();await loadGame(S);};

@@ -105,6 +105,7 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #pause .pb{background:#1d130b;color:#f3e6d3;border:1px solid #6b4a2b;border-radius:12px;padding:18px 22px;display:flex;flex-direction:column;gap:10px;min-width:240px;box-shadow:0 10px 40px #000a}
 #pause h3{margin:0 0 4px;text-align:center}#pause button{background:#3a2716;color:#f3e6d3;border:1px solid #6b4a2b;border-radius:8px;padding:9px 12px;font:inherit;cursor:pointer}#pause button:hover:not(:disabled){background:#4d351e}#pause button:disabled{opacity:.45;cursor:default}
 #pzInfo{font-size:12px;opacity:.7;text-align:center}
+#pause .nz{font-size:13px;display:flex;gap:8px;align-items:center;justify-content:center}
 #toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#fff;color:#222;padding:7px 16px;border-radius:14px;font:bold 14px system-ui,sans-serif;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:10000}#toast.on{opacity:1;transform:translate(-50%,0)}
 
 #startM{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#0b1a2ecc,#02060ef2);font:16px system-ui,sans-serif;color:#f3e6d3}#startM[hidden]{display:none}
