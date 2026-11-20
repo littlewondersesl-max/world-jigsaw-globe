@@ -8,7 +8,7 @@ const BRP = 'previews/brazil/';
 const SA = { lon0: -82, lon1: -34, lat0: -56, lat1: 13 };
 const BR = { lon0: -74.5, lon1: -34, lat0: -34.5, lat1: 5.8 };
 const DEG = 1.5 * Math.PI / 180;
-const VEX0 = 0.011, LIFT0 = 0.00002;
+const VEX0 = 0.0022, LIFT0 = 0.00002;
 // Capital + the main cities. tier "show" is the denser miniature used for the largest cities.
 // Rio also keeps the hand-built model, which takes over only when you are very close.
 const CITIES = [
@@ -273,7 +273,8 @@ export function attachSADetail(THREE, api) {
     bbS: { value: SU.bb.value }, bbB: { value: PU.bb.value },
     on: SU.on, br: { value: 0 }, sun: U.sun,
     sat: { value: SU.map.value }, satOn: { value: 0 }, satBox: { value: new THREE.Vector4() },
-    rioOn: { value: 0 }, rioB: { value: new THREE.Vector4() }
+    rioOn: { value: 0 }, rioB: { value: new THREE.Vector4() },
+    ctr: { value: new THREE.Vector2() }, span: { value: 1 }
   };
   mats.patch = new THREE.ShaderMaterial({
     uniforms: patchU,
@@ -291,7 +292,8 @@ export function attachSADetail(THREE, api) {
     fragmentShader: `
       uniform sampler2D mapS, mapB, ids, sat;
       uniform vec4 bbS, bbB, satBox, rioB;
-      uniform float on[16], br, rioOn, satOn;
+      uniform float on[16], br, rioOn, satOn, span;
+      uniform vec2 ctr;
       uniform vec3 sun;
       varying vec3 vWp; varying vec2 vLL;
       void main(){
@@ -304,23 +306,31 @@ export function attachSADetail(THREE, api) {
         if(rioOn>0.45 && vLL.x>rioB.x && vLL.x<rioB.z && vLL.y>rioB.y && vLL.y<rioB.w) discard;
         vec2 tuv=vec2((vLL.x-satBox.x)/(satBox.z-satBox.x),(vLL.y-satBox.y)/(satBox.w-satBox.y));
         vec3 raw;
-        if(satOn>0.5 && tuv.x>0.0 && tuv.x<1.0 && tuv.y>0.0 && tuv.y<1.0) raw=texture2D(sat, tuv).rgb;
-        else {
-          vec2 uvB=vec2((vLL.x-bbB.x)/(bbB.z-bbB.x),(vLL.y-bbB.y)/(bbB.w-bbB.y));
-          raw=k==3?texture2D(mapB, clamp(uvB,0.001,0.999)).rgb:texture2D(mapS, clamp(uvS,0.001,0.999)).rgb;
-        }
+        if(satOn<0.5) discard;
+        float tileEdge=min(min(tuv.x, 1.0-tuv.x), min(tuv.y, 1.0-tuv.y));
+        if(tileEdge<=0.0) discard;
+        raw=texture2D(sat, tuv).rgb;
+        if(dot(raw, vec3(1.0))<0.004) discard;
         vec3 mp=pow(raw, vec3(2.2));
         float l=dot(mp, vec3(0.28,0.40,0.26));
         mp=mix(vec3(l), mp, 1.15);
         vec3 n=normalize(cross(dFdx(vWp), dFdy(vWp)));
         float nd=dot(n, normalize(sun));
-        float hill=0.74+0.36*smoothstep(-0.25,0.8,nd);
+        float hill=0.64+0.52*smoothstep(-0.4,0.85,nd);
         vec3 col=mp*hill;
+        float edge=max(abs(vLL.x-ctr.x), abs(vLL.y-ctr.y))/max(span,0.05);
+        float fade=min(smoothstep(1.0, 0.45, edge), smoothstep(0.0, 0.16, tileEdge));
+        if(fade<0.97){
+          float hsh=fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233)))*43758.5453);
+          if(hsh>fade) discard;
+        }
         gl_FragColor=vec4(pow(col, vec3(1.0/2.2)), 1.0);
       }`
   });
   mats.patch.userData.u = patchU;
   mats.patch.side = THREE.DoubleSide;
+  mats.patch.depthTest = false;
+  mats.patch.depthWrite = false;
   mats.patch.polygonOffset = true; mats.patch.polygonOffsetFactor = -1;
 
   const live = [mats.canopy, mats.trunk, mats.build, mats.roof, mats.road, mats.fig, mats.bank, mats.river, mats.lake, mats.foam, mats.patch];
@@ -468,7 +478,7 @@ export function attachSADetail(THREE, api) {
     const fov = C.fov * Math.PI / 180;
     const width = 2 * Math.tan(fov * 0.5) * Math.max(alt, 0.003);
     const deg = width / DEG;
-    return Math.min(1.5, Math.max(0.32, deg * 0.72));
+    return Math.min(2.4, Math.max(0.32, deg * 1.35));
   }
   function overPlaced(ll) {
     if (!maps || !ll) return false;
@@ -551,13 +561,34 @@ export function attachSADetail(THREE, api) {
     // ground patch
     const N = 168;
     const pos = [], uv = [], hhA = [], llA = [], idx = [];
+    const H = N + 1;
+    const hhG = new Float32Array(H * H);
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const lon = ll.lon + (i / N - 0.5) * 2 * half, lat = ll.lat + (j / N - 0.5) * 2 * half;
-      const h = height01(lon, lat), hh = h * h;
+      const h = height01(lon, lat);
+      hhG[j * H + i] = h * h;
+      llA.push(lon, lat);
+    }
+    // Keep neighbouring vertices from folding into big flat faces on a steep ridge.
+    for (let pass = 0; pass < 6; pass++) {
+      const next = hhG.slice();
+      for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+        let s = hhG[j * H + i], c = 1;
+        if (i > 0) { s += hhG[j * H + i - 1]; c++; }
+        if (i < N) { s += hhG[j * H + i + 1]; c++; }
+        if (j > 0) { s += hhG[(j - 1) * H + i]; c++; }
+        if (j < N) { s += hhG[(j + 1) * H + i]; c++; }
+        next[j * H + i] = s / c;
+      }
+      hhG.set(next);
+    }
+    for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
+      const lon = llA[(j * H + i) * 2], lat = llA[(j * H + i) * 2 + 1];
+      const hh = hhG[j * H + i];
       const la = lat * Math.PI / 180, lo = lon * Math.PI / 180;
       const r = 1.5 + LIFT0 + hh * VEX0 + 0.000045;
       pos.push(Math.cos(la) * Math.sin(lo) * r, Math.sin(la) * r, Math.cos(la) * Math.cos(lo) * r);
-      uv.push(i / N, j / N); hhA.push(hh); llA.push(lon, lat);
+      uv.push(i / N, j / N); hhA.push(hh);
     }
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const a = j * (N + 1) + i;
@@ -573,56 +604,82 @@ export function attachSADetail(THREE, api) {
     patch.frustumCulled = false; patch.renderOrder = 3;
     root.add(patch);
 
-    // trees — a trunk plus two canopy cones, packed so a real forest reads as continuous cover
-    const TREES = 14000;
+    // Satellite colours decide what grows where, so the forest follows the real canopy and stops at rivers.
+    const grab = tiles && tiles.grab ? tiles.grab() : null;
+    const satAt = (lon, lat) => {
+      if (!grab) return null;
+      const b = grab.box;
+      const u = (lon - b.lon0) / (b.lon1 - b.lon0);
+      const v = (b.lat1 - lat) / (b.lat1 - b.lat0);
+      if (u <= 0 || v <= 0 || u >= 1 || v >= 1) return null;
+      const x = Math.min(grab.w - 1, Math.max(0, u * grab.w | 0));
+      const y = Math.min(grab.h - 1, Math.max(0, v * grab.h | 0));
+      const i = (y * grab.w + x) * 4;
+      if (grab.data[i + 3] < 20) return null;
+      return [grab.data[i], grab.data[i + 1], grab.data[i + 2]];
+    };
+    const landKind = (lon, lat) => {
+      const rgb = satAt(lon, lat);
+      if (!rgb) return 'none';
+      const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+      const l = (r + g + b) / 3, mx = Math.max(r, g, b), mn = Math.min(r, g, b), sat = mx - mn;
+      const green = g - Math.max(r, b);
+      if (l < 0.15 && b + 0.03 >= r && b + 0.02 >= g) return 'water';
+      if (b > r * 1.08 && b > g * 0.92 && l < 0.4 && green < 0.02) return 'water';
+      if (green > 0.055 && g > r * 1.12 && g > b && l > 0.1 && l < 0.48) return 'forest';
+      if (l > 0.58 && sat < 0.18) return 'bare';
+      if (r > g + 0.035 && r > b + 0.05 && l > 0.28 && sat > 0.07) return 'bare';
+      if (l > 0.14 && l < 0.62 && green < 0.025 && sat < 0.2) return 'urban';
+      return 'land';
+    };
+    const coverAt = (lon, lat) => {
+      const e = Math.max(Math.abs(lon - ll.lon), Math.abs(lat - ll.lat)) / half;
+      const t = (0.9 - e) / 0.5;
+      if (t <= 0) return 0;
+      if (t >= 1) return 1;
+      return t * t * (3 - 2 * t);
+    };
+    const greens = [
+      [0.07, 0.30, 0.06], [0.11, 0.40, 0.07], [0.16, 0.36, 0.09],
+      [0.09, 0.26, 0.05], [0.18, 0.44, 0.10], [0.13, 0.33, 0.08], [0.22, 0.46, 0.12]
+    ];
+
+    const TREES = 9000;
     const canopies = addInst(geos.canopy, mats.canopy, TREES);
     const trunks = addInst(geos.trunk, mats.trunk, TREES);
-    let ti = 0;
-    const step = Math.max(0.014, (2 * half) / 96);
-    for (let lat = ll.lat - half; lat <= ll.lat + half && ti < TREES; lat += step) {
+    let ti = 0, nForest = 0, nUrban = 0;
+    const step = Math.max(0.012, (2 * half) / 80);
+    for (let lat = ll.lat - half; lat <= ll.lat + half && false && ti < TREES; lat += step) {
       for (let lon = ll.lon - half; lon <= ll.lon + half && ti < TREES; lon += step) {
-        const jlon = lon + (rnd() - 0.5) * step * 0.65, jlat = lat + (rnd() - 0.5) * step * 0.65;
+        const jlon = lon + (rnd() - 0.5) * step * 0.85, jlat = lat + (rnd() - 0.5) * step * 0.85;
+        const fade = coverAt(jlon, jlat);
+        if (fade < 0.08 || rnd() > fade) continue;
         const id = idAt(jlon, jlat);
-        if (!isOn(id) || waterAt(jlon, jlat) > 0.28) continue;
+        if (!isOn(id) || waterAt(jlon, jlat) > 0.2) continue;
         const [m, ins] = maskInset(jlon, jlat, id);
-        if (m < 0.45 || ins < 0.22) continue;
+        if (m < 0.4 || ins < 0.16) continue;
+        const kind = landKind(jlon, jlat);
+        if (kind !== 'forest') continue;
         const h = height01(jlon, jlat);
-        const f = forestAt(jlon, jlat, h);
-        if (h > 0.62 || f < 0.48) continue;
-        if (slope(jlon, jlat) > 0.62) continue;
-        let inCity = false;
-        for (const c of cities) if (Math.hypot(jlon - c.lon, (jlat - c.lat) * 1.05) < c.rad * 0.9) { inCity = true; break; }
-        if (inCity) continue;
-        if (rioCover && Math.hypot(jlon + 43.2, jlat + 22.9) < 0.36) continue;
-        const o = basis(jlon, jlat, 0.00006);
-        const sc = (0.00042 + rnd() * 0.00022) * (f > 0.55 ? 1.15 : 0.8) * (h > 0.5 ? 0.72 : 1);
+        if (h > 0.42 || slope(jlon, jlat) > 0.2) continue;
+        if (rioCover && Math.hypot(jlon + 43.2, jlat + 22.9) < 0.32) continue;
+        if (rnd() > 0.42 * fade) continue;
+        nForest++;
+        const o = basis(jlon, jlat, 0.00005);
+        const sc = (0.00011 + rnd() * 0.0002) * (0.55 + fade * 0.45) * (0.6 + rnd() * 0.9);
         const yaw = rnd() * 6.28;
-        compose(o.p, yaw, sc, sc * (0.85 + rnd() * 0.45), sc);
+        compose(o.p, yaw, sc, sc * (0.55 + rnd() * 0.9), sc);
         canopies.setMatrixAt(ti, M);
-        if (h > 0.5) col.setRGB(0.28 + rnd() * 0.08, 0.40 + rnd() * 0.08, 0.16);
-        else if (lat > -12 && lon < -50 && h < 0.3) col.setRGB(0.10 + rnd() * 0.06, 0.40 + rnd() * 0.14, 0.08 + rnd() * 0.04);
-        else col.setRGB(0.14 + rnd() * 0.08, 0.42 + rnd() * 0.12, 0.10 + rnd() * 0.05);
+        const tone = greens[(rnd() * greens.length) | 0];
+        col.setRGB(tone[0] + rnd() * 0.03, tone[1] + rnd() * 0.04, tone[2]);
         canopies.setColorAt(ti, col);
         canopies.userData.hh[ti] = o.hh;
-        compose(o.p, yaw, sc, sc, sc);
+        compose(o.p, yaw, sc * 0.85, sc * 0.85, sc * 0.85);
         trunks.setMatrixAt(ti, M);
-        col.setRGB(0.38 + rnd() * 0.08, 0.24 + rnd() * 0.04, 0.10);
+        col.setRGB(0.36 + rnd() * 0.08, 0.22 + rnd() * 0.04, 0.09);
         trunks.setColorAt(ti, col);
         trunks.userData.hh[ti] = o.hh;
         ti++;
-        if (f > 0.62 && ti < TREES && rnd() < 0.85) {
-          const o2 = basis(jlon + (rnd() - 0.5) * step * 0.45, jlat + (rnd() - 0.5) * step * 0.45, 0.00006);
-          const sc2 = sc * (0.65 + rnd() * 0.35);
-          compose(o2.p, rnd() * 6, sc2, sc2 * (0.8 + rnd() * 0.4), sc2);
-          canopies.setMatrixAt(ti, M);
-          col.setRGB(0.12 + rnd() * 0.1, 0.36 + rnd() * 0.16, 0.08);
-          canopies.setColorAt(ti, col); canopies.userData.hh[ti] = o2.hh;
-          compose(o2.p, 0, sc2, sc2, sc2);
-          trunks.setMatrixAt(ti, M);
-          col.setRGB(0.36, 0.22, 0.09);
-          trunks.setColorAt(ti, col); trunks.userData.hh[ti] = o2.hh;
-          ti++;
-        }
       }
     }
     canopies.count = ti; trunks.count = ti;
@@ -631,114 +688,12 @@ export function attachSADetail(THREE, api) {
     if (canopyMesh) { canopyMesh.renderOrder = 5; root.add(canopyMesh); } else canopies.geometry.dispose();
     if (trunkMesh) { trunkMesh.renderOrder = 5; root.add(trunkMesh); } else trunks.geometry.dispose();
 
-    // cities
-    let bN = 0, rN = 0, fN = 0, pN = 0;
-    for (const c of cities) {
-      const n = c.tier === 'show' ? 22 : 12;
-      bN += n * n * 4; rN += n * n * 2; fN += n * n; pN += c.tier === 'show' ? 80 : 16;
-    }
-    bN = Math.min(9000, bN); rN = Math.min(8000, rN); fN = Math.min(5000, fN); pN = Math.min(420, pN);
-    const B = addInst(geos.box, mats.build, bN || 1);
-    const RD = addInst(geos.road, mats.road, rN || 1);
-    const RF = addInst(geos.roof, mats.roof, fN || 1);
-    const FG = addInst(geos.fig, mats.fig, pN || 1);
+    // Generated block cities read as clumps on the satellite, so the sharp imagery stands on its own.
+    // Rio keeps the hand-built model, which is loaded separately.
     let bi = 0, ri = 0, fi = 0, pi = 0;
-    const gDeg = DEG;
-    for (const c of cities) {
-      if (c.name === 'Rio de Janeiro') continue;
-      const n = c.tier === 'show' ? 22 : 12;
-      const g = c.rad / n;
-      const ca = Math.cos(c.ang), sa = Math.sin(c.ang);
-      const P2 = (i, j) => [c.lon + (i * ca - j * sa) * g, c.lat + (i * sa + j * ca) * g];
-      for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) {
-        const rr = Math.hypot(i, j) * g;
-        if (rr > c.rad * (0.82 + rnd() * 0.18)) continue;
-        const near = 1 - rr / c.rad;
-        for (const [di, dj, rot] of [[0.5, 0, 0], [0, 0.5, 1]]) {
-          if (ri >= rN) break;
-          const [lon, lat] = P2(i + di, j + dj);
-          const id = idAt(lon, lat);
-          if (id !== c.id || waterAt(lon, lat) > 0.3) continue;
-          const [m, ins] = maskInset(lon, lat, id);
-          if (m < 0.5 || ins < 0.35 || slope(lon, lat) > 0.48) continue;
-          const o = basis(lon, lat, 0.00016);
-          const main = (rot ? i : j) % 5 === 0;
-          const len = g * gDeg * 1.05, wid = g * gDeg * (main ? 0.34 : 0.2);
-          compose(o.p, -c.ang - (rot ? Math.PI / 2 : 0), len, 1, wid);
-          RD.setMatrixAt(ri, M);
-          col.setRGB(main ? 0.62 : 0.55, main ? 0.56 : 0.5, main ? 0.46 : 0.4);
-          RD.setColorAt(ri, col);
-          RD.userData.hh[ri] = o.hh; ri++;
-        }
-        if (c.tier === 'show' && rr < g * 0.85) {
-          if (pi < pN && rnd() < 0.8) {
-            const [lon, lat] = P2(i + (rnd() - 0.5) * 0.3, j + (rnd() - 0.5) * 0.3);
-            if (idAt(lon, lat) === c.id) {
-              const o = basis(lon, lat, 0.00018);
-              const hs = g * gDeg * 0.16;
-              compose(o.p, rnd() * 6, hs * 0.35, hs, hs * 0.35);
-              FG.setMatrixAt(pi, M);
-              col.setHSL(rnd() * 0.12 + 0.02, 0.35 + rnd() * 0.3, 0.35 + rnd() * 0.2);
-              FG.setColorAt(pi, col); FG.userData.hh[pi] = o.hh; pi++;
-            }
-          }
-          continue;
-        }
-        const nb = (c.tier === 'show' ? 3 : 2) + (near > 0.45 && rnd() < 0.5 ? 1 : 0);
-        for (let b = 0; b < nb && bi < bN; b++) {
-          const [lon, lat] = P2(i + 0.5 + (rnd() - 0.5) * 0.55, j + 0.5 + (rnd() - 0.5) * 0.55);
-          const id = idAt(lon, lat);
-          if (id !== c.id || waterAt(lon, lat) > 0.28) continue;
-          const [m, ins] = maskInset(lon, lat, id);
-          if (m < 0.5 || ins < 0.38) continue;
-          const sl = slope(lon, lat);
-          if (sl > 0.5) continue;
-          const o = basis(lon, lat, 0.00004);
-          const cell = g * gDeg;
-          const tall = c.tier === 'show' && near > 0.55 && rnd() < 0.55 && sl < 0.2;
-          const tower = c.tier === 'show' && near > 0.78 && rnd() < 0.7 && sl < 0.15;
-          const hg = tower ? cell * (2.4 + rnd() * 2.2) : tall ? cell * (1.1 + rnd() * 1.3) : cell * (0.32 + rnd() * 0.38);
-          const wd = cell * (tower ? 0.22 + rnd() * 0.08 : 0.34 + rnd() * 0.16);
-          const dp = cell * (tower ? 0.22 + rnd() * 0.08 : 0.30 + rnd() * 0.14);
-          compose(o.p, -c.ang, wd, hg, dp);
-          B.setMatrixAt(bi, M);
-          if (tower) col.setRGB(0.78 + rnd() * 0.12, 0.82 + rnd() * 0.1, 0.86 + rnd() * 0.08);
-          else if (tall) col.setRGB(0.86 + rnd() * 0.08, 0.84 + rnd() * 0.06, 0.78 + rnd() * 0.06);
-          else if (rnd() < 0.55) col.setRGB(0.94, 0.90, 0.80);
-          else col.setRGB(0.90 + rnd() * 0.06, 0.86 + rnd() * 0.06, 0.76);
-          B.setColorAt(bi, col); B.userData.hh[bi] = o.hh; bi++;
-          if (!tower && fi < fN && rnd() < 0.86) {
-            const top = o.p.clone().addScaledVector(up, hg);
-            const rh = Math.min(wd, dp) * (0.55 + rnd() * 0.25);
-            compose(top, -c.ang, wd * 1.08, rh, dp * 1.08);
-            RF.setMatrixAt(fi, M);
-            const hue = rnd() < 0.7 ? 0.02 + rnd() * 0.03 : 0.07 + rnd() * 0.04;
-            col.setHSL(hue, 0.62 + rnd() * 0.15, 0.40 + rnd() * 0.08);
-            RF.setColorAt(fi, col); RF.userData.hh[fi] = o.hh; fi++;
-          }
-          if (c.tier === 'show' && pi < pN && near > 0.25 && rnd() < 0.08) {
-            const [x, z] = P2(i + (rnd() - 0.5), j + (rnd() - 0.5));
-            if (idAt(x, z) === c.id && waterAt(x, z) < 0.3) {
-              const q = basis(x, z, 0.00018);
-              const hs = cell * 0.13;
-              compose(q.p, rnd() * 6, hs * 0.32, hs, hs * 0.32);
-              FG.setMatrixAt(pi, M);
-              col.setHSL(rnd(), 0.35 + rnd() * 0.3, 0.32 + rnd() * 0.25);
-              FG.setColorAt(pi, col); FG.userData.hh[pi] = q.hh; pi++;
-            }
-          }
-        }
-      }
-    }
-    for (const [mesh, n, order] of [[B, bi, 5], [RD, ri, 4], [RF, fi, 5], [FG, pi, 6]]) {
-      mesh.count = n;
-      const m = finishInst(mesh);
-      if (m) { m.renderOrder = order; root.add(m); }
-      else mesh.geometry.dispose();
-    }
 
     // rivers — Natural Earth courses already clipped to the continent (Amazon, Negro, Madeira, Orinoco, Paraná, Paraguay, Uruguay, São Francisco, Magdalena, …)
-    if (maps.rivers) {
+    if (false && maps.rivers) {
       const rpos = [], ruv = [], rhh = [], ridx = [];
       const bpos = [], buv = [], bhh = [], bidx = [];
       for (const rv of maps.rivers) {
@@ -848,8 +803,7 @@ export function attachSADetail(THREE, api) {
         }
         qidx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
       }
-      const nearLake = Math.hypot(ll.lon + 69.2, ll.lat + 16) < 1.4;
-      if (nearLake && qidx.length) {
+      if (false && qidx.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(qpos, 3));
         g.setAttribute('uv', new THREE.Float32BufferAttribute(quv, 2));
@@ -891,7 +845,7 @@ export function attachSADetail(THREE, api) {
         fidx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
         fi2 += 4;
       }
-      if (fidx.length) {
+      if (false && fidx.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(fpos, 3));
         g.setAttribute('uv', new THREE.Float32BufferAttribute(fuv, 2));
@@ -903,7 +857,7 @@ export function attachSADetail(THREE, api) {
     }
 
     root.userData.stats = {
-      trees: ti, buildings: bi, roads: ri, roofs: fi, figures: pi,
+      trees: ti, buildings: bi, roads: ri, roofs: fi, figures: pi, forest: nForest, urban: nUrban, sat: grab ? 1 : 0,
       center: [Math.round(ll.lon * 100) / 100, Math.round(ll.lat * 100) / 100],
       cities: cities.map(c => ({ name: c.name, country: countryName(c.id), tier: c.tier, cap: !!c.cap }))
     };
@@ -918,6 +872,8 @@ export function attachSADetail(THREE, api) {
     const rio = flags && flags.rio > 0.4 && flags.rioB;
     u.rioOn.value = rio ? flags.rio : 0;
     if (rio) u.rioB.value.set(flags.rioB[0], flags.rioB[1], flags.rioB[2], flags.rioB[3]);
+    const rect = group && group.userData.rect;
+    if (rect) { u.ctr.value.set((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2); u.span.value = (rect[2] - rect[0]) / 2; }
     if (tiles && tiles.ready && tiles.box && tiles.tex) {
       u.sat.value = tiles.tex;
       u.satOn.value = 1;
@@ -1006,7 +962,7 @@ export function attachSADetail(THREE, api) {
   }
 
   function schedule(ll, span, rio) {
-    const key = [Math.round(ll.lon * 2) / 2, Math.round(ll.lat * 2) / 2, Math.round(span * 2) / 2, placedMask(), rio ? 1 : 0].join(':');
+    const key = [Math.round(ll.lon * 2) / 2, Math.round(ll.lat * 2) / 2, Math.round(span * 2) / 2, placedMask(), rio ? 1 : 0, tiles && tiles.stamp ? tiles.stamp() : '0'].join(':');
     if (key === builtKey || key === pendingKey) return;
     pendingKey = key;
     const my = ++token;
