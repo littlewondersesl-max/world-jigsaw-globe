@@ -40,30 +40,32 @@ $('zin').onclick=()=>setZoom(1.4);$('zout').onclick=()=>setZoom(1/1.4);
 function spinTo(c,z){G3.spinTo(c,z);}
 // ---------- pieces ----------
 // ---- piece faces: real land colours sampled from the same world texture the globe uses (Natural Earth I + our South America look-3) ----
-const WT={w:0,h:0,d:null};const wtReady=new Promise(r=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const x=c.getContext('2d');x.drawImage(im,0,0);WT.w=im.width;WT.h=im.height;WT.d=x.getImageData(0,0,im.width,im.height).data;r()};im.onerror=r;im.src='pieces_world.jpg'});
-function loadIm(src){return new Promise(r=>{const im=new Image();im.onload=()=>r(im);im.onerror=()=>r(null);im.src=src;});}
-let SAIM=null,BRIM=null,SAD=null,BRD=null;
-const hqReady=Promise.all([wtReady,loadIm('previews/south-america/c3.jpg'),loadIm('previews/brazil/c3.jpg')]).then(([,sa,br])=>{SAIM=sa;BRIM=br;
- const grab=(im)=>{if(!im)return null;const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');x.drawImage(im,0,0);return {w:c.width,h:c.height,d:x.getImageData(0,0,c.width,c.height).data};};
- SAD=grab(SAIM);BRD=grab(BRIM);});
+const PAPER='#d9d0c3';
+const worldIm=window.__worldPhoto||new Image();window.__worldPhoto=worldIm;if(!worldIm.getAttribute('src'))worldIm.src='pieces_world.jpg';
+const hqReady=new Promise(r=>{if(worldIm.complete&&worldIm.naturalWidth)r();else{worldIm.onload=()=>r();worldIm.onerror=()=>r();}});
 function hiRes(){return true;}
-function sampleBilinear(src,u,v){const w=src.w,h=src.h,d=src.d;const x=Math.min(w-1.001,Math.max(0,u*(w-1))),y=Math.min(h-1.001,Math.max(0,v*(h-1)));
- const x0=x|0,y0=y|0,x1=Math.min(w-1,x0+1),y1=Math.min(h-1,y0+1),tx=x-x0,ty=y-y0;
- const at=(X,Y)=>{const i=(Y*w+X)*4;return [d[i],d[i+1],d[i+2]];};
- const a=at(x0,y0),b=at(x1,y0),c=at(x0,y1),e=at(x1,y1);
- return [0,1,2].map(k=>((a[k]*(1-tx)+b[k]*tx)*(1-ty)+(c[k]*(1-tx)+e[k]*tx)*ty)|0);}
-function faceSource(f){if(f.name==='Brazil'&&BRD)return {src:BRD,lon0:-74.5,lon1:-34,lat0:-34.5,lat1:5.8};
- if(SAD&&f.c&&f.c[0]>-81&&f.c[0]<-35&&f.c[1]>-55&&f.c[1]<12)return {src:SAD,lon0:-82,lon1:-34,lat0:-56,lat1:13};
- if(WT.d)return {src:WT,equirect:true};return null;}
-function face(f){if(f._face)return f._face;const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(1).translate([0,0]).clipAngle(90),b=d3.geoPath(pr).bounds(f);
- const bw=b[1][0]-b[0][0],bh=b[1][1]-b[0][1],FS=hiRes(f.name)?1024:192,k=FS/Math.max(bw,bh),cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
- const c=document.createElement('canvas');c.width=cw;c.height=ch;const x=c.getContext('2d'),id=x.createImageData(cw,ch),o=id.data;const src=faceSource(f);
- if(src){const l0=f.c[0]*Math.PI/180,p0=f.c[1]*Math.PI/180,sp=Math.sin(p0),cp=Math.cos(p0);
-  for(let j=0;j<ch;j++)for(let i=0;i<cw;i++){const X=b[0][0]+(i+.5)/k,Y=-(b[0][1]+(j+.5)/k),rr=X*X+Y*Y;if(rr>=1)continue;const z=Math.sqrt(1-rr);
-   const lat=Math.asin(z*sp+Y*cp),lon=l0+Math.atan2(X,z*cp-Y*sp);const la=lat*180/Math.PI,lo=lon*180/Math.PI;
-   let u,v;if(src.equirect){u=((lo+180)/360%1+1)%1;v=(90-la)/180;}else{u=(lo-src.lon0)/(src.lon1-src.lon0);v=(src.lat1-la)/(src.lat1-src.lat0);if(u<0||u>1||v<0||v>1)continue;}
-   const rgb=sampleBilinear(src.src,u,v),t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}}
- x.putImageData(id,0,0);f._face={url:c.toDataURL('image/jpeg',.92),b,px:Math.max(cw,ch)};return f._face;}
+function angDeg(a,b){const dLa=(b[1]-a[1])*Math.PI/180,dLo=(b[0]-a[0])*Math.PI/180,la1=a[1]*Math.PI/180,la2=b[1]*Math.PI/180;
+ const h=Math.sin(dLa/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLo/2)**2;return 2*Math.asin(Math.min(1,Math.sqrt(h)))*180/Math.PI;}
+function ringCenter(ring){let x=0,y=0,n=0;for(const p of ring){if(!p)continue;x+=p[0];y+=p[1];n++;}return n?[x/n,y/n]:[0,0];}
+// The picture and the outline use the landmass around the capital. Distant islands were stretching one piece into a photo of half the Earth.
+function homeFeature(f){const g=f&&f.geometry;if(!g||!f.c)return f;
+ const polys=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:null;
+ if(!polys||polys.length<2)return f;
+ const near=polys.filter(poly=>poly[0]&&poly[0].length>2&&angDeg(f.c,ringCenter(poly[0]))<62);
+ const use=near.length?near:[polys.reduce((a,b)=>((b[0]&&b[0].length)>(a[0]&&a[0].length)?b:a))];
+ return {type:'Feature',name:f.name,c:f.c,geometry:use.length>1?{type:'MultiPolygon',coordinates:use}:{type:'Polygon',coordinates:use[0]}};}
+function face(f){if(f._face)return f._face;const h=homeFeature(f),c0=h.c||f.c||[0,0];
+ const pr=d3.geoOrthographic().rotate([-c0[0],-c0[1]]).scale(1).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr),b=gp.bounds(h);
+ const bw=Math.max(.02,(b[1][0]-b[0][0])||.02),bh=Math.max(.02,(b[1][1]-b[0][1])||.02),FS=512,k=FS/Math.max(bw,bh);
+ const cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
+ const c=document.createElement('canvas');c.width=cw;c.height=ch;const x=c.getContext('2d');
+ x.fillStyle=PAPER;x.fillRect(0,0,cw,ch);
+ const im=worldIm;if(im.complete&&im.naturalWidth){const gb=d3.geoBounds(h);let lon0=gb[0][0],lon1=gb[1][0],lat0=gb[0][1],lat1=gb[1][1];
+  if(!(lon1>lon0)||lon1-lon0>110){const rad=Math.min(36,Math.max(8,((f.rad||.2)*180/Math.PI)*1.35));lon0=c0[0]-rad;lon1=c0[0]+rad;lat0=Math.max(-85,c0[1]-rad);lat1=Math.min(85,c0[1]+rad);}
+  const sx=(lon0+180)/360*im.naturalWidth,sy=(90-lat1)/180*im.naturalHeight,sw=Math.max(1,(lon1-lon0)/360*im.naturalWidth),sh=Math.max(1,(lat1-lat0)/180*im.naturalHeight);
+  x.drawImage(im,sx,sy,sw,sh,0,0,cw,ch);
+  const d=gp(h);if(d){x.globalCompositeOperation='destination-in';x.save();x.translate(-b[0][0]*k,-b[0][1]*k);x.scale(k,k);x.fill(new Path2D(d));x.restore();x.globalCompositeOperation='destination-over';x.fillStyle=PAPER;x.fillRect(0,0,cw,ch);}}
+ f._face={url:c.toDataURL('image/jpeg',.84),b,px:Math.max(cw,ch)};return f._face;}
 // A loose piece is drawn from the coarse world photo first, then replaced by a Sentinel-2 mosaic
 // at enough zoom that the face stays sharp when the player enlarges it.
 const FACE_TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/';
@@ -74,67 +76,87 @@ function sharpZ(span){const spanD=Math.max(span,.22);
  // About 2800 source pixels across the country, still inside a tile window so the mosaic is not clipped.
  const zWant=Math.ceil(Math.log2(2800/spanD)),zFit=Math.floor(Math.log2(11*360/spanD));
  return Math.max(5,Math.min(13,zWant,zFit));}
-function loadTile(z,x,y){const n=2**z;x=(x%n+n)%n;y=Math.max(0,Math.min(n-1,y));const k=z+'/'+y+'/'+x;if(faceTiles.has(k))return faceTiles.get(k);
- const p=new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>res(null);im.src=FACE_TILE+k+'.jpg';});
+function loadTile(z,x,y,attempt){const n=2**z;x=(x%n+n)%n;y=Math.max(0,Math.min(n-1,y));const k=z+'/'+y+'/'+x;if(faceTiles.has(k))return faceTiles.get(k);
+ const p=new Promise(res=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>{faceTiles.delete(k);if((attempt||0)<2)setTimeout(()=>res(loadTile(z,x,y,(attempt||0)+1)),350*(attempt||0)+280);else res(null);};im.src=FACE_TILE+k+'.jpg';});
  faceTiles.set(k,p);return p;}
 function wantSharp(f,first){if(!f||f._sharp)return;const i=sharpQ.indexOf(f);if(f._sharpWait){if(first&&i>0){sharpQ.splice(i,1);sharpQ.unshift(f);}return;}
  f._sharpWait=true;if(first)sharpQ.unshift(f);else sharpQ.push(f);pumpSharp();}
-function pumpSharp(){if(carrying||drag){clearTimeout(pumpSharp.t);pumpSharp.t=setTimeout(pumpSharp,60);return;}while(sharpBusy<1&&sharpQ.length){sharpBusy++;const f=sharpQ.shift();buildSharpFace(f).then(ok=>{f._sharpWait=false;if(ok){f._sharp=true;retint(f);}sharpBusy--;pumpSharp();});}}
-async function buildSharpFace(f){const b=d3.geoBounds(f);let lon0=b[0][0],lon1=b[1][0],lat0=b[0][1],lat1=b[1][1];
+function pumpSharp(){if(carrying||drag){clearTimeout(pumpSharp.t);pumpSharp.t=setTimeout(pumpSharp,60);return;}while(sharpBusy<1&&sharpQ.length){sharpBusy++;const f=sharpQ.shift();buildSharpFace(f).then(ok=>{f._sharpWait=false;if(ok){f._sharp=true;f._sharpTries=0;retint(f);}else{f._sharpTries=(f._sharpTries||0)+1;if(f._sharpTries<2)setTimeout(()=>wantSharp(f,false),600);}sharpBusy--;queueTextures();pumpSharp();});}}
+async function buildSharpFace(f){const h=homeFeature(f);const b=d3.geoBounds(h);let lon0=b[0][0],lon1=b[1][0],lat0=b[0][1],lat1=b[1][1];
  if(lon1-lon0>180){const mid=f.c[0];const shift=lon=>lon-mid>180?lon-360:mid-lon>180?lon+360:lon;lon0=shift(lon0);lon1=shift(lon1);if(lon1<lon0){const t=lon0;lon0=lon1;lon1=t;}}
- const span=Math.max(lon1-lon0,lat1-lat0,.25),z=sharpZ(span),n=2**z;
+ const span=Math.max(lon1-lon0,lat1-lat0,.25),z=Math.max(5,Math.min(12,Math.ceil(Math.log2(1024/span)))),n=2**z;
  const x0=Math.floor((lon0+180)/360*n)-1,x1=Math.ceil((lon1+180)/360*n)+1;
  const y0=Math.floor(mercY(lat1)*n)-1,y1=Math.ceil(mercY(lat0)*n)+1;
- const nx=Math.min(14,Math.max(1,x1-x0)),ny=Math.min(14,Math.max(1,y1-y0));
+ const nx=Math.min(6,Math.max(1,x1-x0)),ny=Math.min(6,Math.max(1,y1-y0));
  const cell=256,mos=document.createElement('canvas');mos.width=nx*cell;mos.height=ny*cell;const mx=mos.getContext('2d',{willReadFrequently:true});
  let got=0;const jobs=[];for(let j=0;j<ny;j++)for(let i=0;i<nx;i++)jobs.push(loadTile(z,x0+i,y0+j).then(im=>{if(im){mx.drawImage(im,i*cell,j*cell,cell,cell);got++;}}));
- await Promise.all(jobs);if(!got)return false;
+ await Promise.all(jobs);if(got<jobs.length*0.7)return false;
  const faceB=f._face&&f._face.b;if(!faceB)return false;
  const bw=faceB[1][0]-faceB[0][0],bh=faceB[1][1]-faceB[0][1];
- const srcPx=Math.max(480,span/360*n*256),dpr=Math.min(2,window.devicePixelRatio||1);
- const FS=Math.round(Math.min(3072,Math.max(srcPx,Math.min(srcPx*dpr,3072))));
+ const FS=1024;
  const k=FS/Math.max(bw,bh),cw=Math.max(2,Math.ceil(bw*k)),ch=Math.max(2,Math.ceil(bh*k));
- const c=document.createElement('canvas');c.width=cw;c.height=ch;const ctx=c.getContext('2d',{willReadFrequently:true});const id=ctx.createImageData(cw,ch),o=id.data;
- const l0=f.c[0]*Math.PI/180,p0=f.c[1]*Math.PI/180,sp=Math.sin(p0),cp=Math.cos(p0);
- const md=mx.getImageData(0,0,mos.width,mos.height).data;
- const sample=(lon,lat)=>{let x=(lon+180)/360*n,y=mercY(lat)*n;const px=(x-x0)/(nx)*mos.width,py=(y-y0)/(ny)*mos.height;
-  if(px<0||py<0||px>=mos.width-1||py>=mos.height-1)return null;
-  const xA=px|0,yA=py|0,tx=px-xA,ty=py-yA,at=(X,Y)=>{const i=(Y*mos.width+X)*4;return [md[i],md[i+1],md[i+2]];};
-  const a=at(xA,yA),b2=at(Math.min(mos.width-1,xA+1),yA),c2=at(xA,Math.min(mos.height-1,yA+1)),e=at(Math.min(mos.width-1,xA+1),Math.min(mos.height-1,yA+1));
-  return [0,1,2].map(q=>((a[q]*(1-tx)+b2[q]*tx)*(1-ty)+(c2[q]*(1-tx)+e[q]*tx)*ty)|0);};
- for(let j0=0;j0<ch;){while(carrying||drag) await new Promise(r=>setTimeout(r,40));
-  const j1=Math.min(ch,j0+4);
-  for(let j=j0;j<j1;j++)for(let i=0;i<cw;i++){const X=faceB[0][0]+(i+.5)/k,Y=-(faceB[0][1]+(j+.5)/k),rr=X*X+Y*Y;if(rr>=1)continue;const zz=Math.sqrt(1-rr);
-   const lat=Math.asin(Math.max(-1,Math.min(1,zz*sp+Y*cp)))*180/Math.PI,lon=(l0+Math.atan2(X,zz*cp-Y*sp))*180/Math.PI;
-   const rgb=sample(lon,lat);if(!rgb)continue;const t=(j*cw+i)*4;o[t]=rgb[0];o[t+1]=rgb[1];o[t+2]=rgb[2];o[t+3]=255;}
-  j0=j1; if(j0<ch) await new Promise(r=>requestAnimationFrame(r));}
- ctx.putImageData(id,0,0);f._face={url:c.toDataURL('image/jpeg',.93),b:faceB,px:Math.max(cw,ch),sharp:true};return true;}
+ const c=document.createElement('canvas');c.width=cw;c.height=ch;const ctx=c.getContext('2d');
+ ctx.fillStyle=PAPER;ctx.fillRect(0,0,cw,ch);
+ const west=(x0/n)*360-180,north=unmercLat(y0,n),east=((x0+nx)/n)*360-180,south=unmercLat(y0+ny,n);
+ const sx=(lon0-west)/Math.max(1e-6,east-west)*mos.width, sy=(north-lat1)/Math.max(1e-6,north-south)*mos.height;
+ const sw=(lon1-lon0)/Math.max(1e-6,east-west)*mos.width, sh=(lat1-lat0)/Math.max(1e-6,north-south)*mos.height;
+ ctx.drawImage(mos,sx,sy,Math.max(1,sw),Math.max(1,sh),0,0,cw,ch);
+ const h2=homeFeature(f),c0=h2.c||f.c,pr=d3.geoOrthographic().rotate([-c0[0],-c0[1]]).scale(1).translate([0,0]).clipAngle(90),d=d3.geoPath(pr)(h2);
+ if(d){ctx.globalCompositeOperation='destination-in';ctx.save();ctx.translate(-faceB[0][0]*k,-faceB[0][1]*k);ctx.scale(k,k);ctx.fill(new Path2D(d));ctx.restore();ctx.globalCompositeOperation='destination-over';ctx.fillStyle=PAPER;ctx.fillRect(0,0,cw,ch);}
+ f._face={url:c.toDataURL('image/jpeg',.9),b:faceB,px:1024,sharp:true};return true;}
+function unmercLat(y,n){const t=Math.PI*(1-2*y/n);return Math.atan(Math.sinh(t))*180/Math.PI;}
 function retint(f){const url=f._face&&f._face.url;if(!url||!pieces)return;
  for(const p of pieces){if(p.f!==f)continue;
   for(const root of [p.el,p.ov,p.body&&p.body.el,(drag&&drag.p===p)?ghost:null]){if(!root)continue;root.querySelectorAll('image').forEach(im=>{if(im.getAttribute('href')!==url)im.setAttribute('href',url);});}
   if(p.pid){const g=shapeSVG(f,K);pcTex(p,g);}}}
 let svgN=0;
-function shapeSVG(f,scale,cls){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(scale).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
- const b=gp.bounds(f),m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],1);
+function shapeSVG(f,scale,cls){const h=homeFeature(f),c0=h.c||f.c;const pr=d3.geoOrthographic().rotate([-c0[0],-c0[1]]).scale(scale).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
+ const b=gp.bounds(h),m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],1);
  // Border tracks the country, not the old fixed 1.2px minimum (that stroke was wider than a small country and left a wood slab around a tiny terrain patch).
  const rim=Math.max(0.16,Math.min(m*0.028,Math.max(m*0.012,0.42)));
  const pad=Math.max(rim*1.6,m*0.05);
  const r=Math.max(Math.abs(b[0][0]),Math.abs(b[0][1]),Math.abs(b[1][0]),Math.abs(b[1][1]))+pad;
- const F=face(f),id='pc'+(svgN++),d=gp(f);
+ const F=face(f),id='pc'+(svgN++),d=gp(h);
  const fb=F.b,ix=fb[0][0]*scale,iy=fb[0][1]*scale,iw=(fb[1][0]-fb[0][0])*scale,ih=(fb[1][1]-fb[0][1])*scale;
  return {svg:`<svg class="pc ${cls||''}" viewBox="${-r} ${-r} ${2*r} ${2*r}" width="${2*r}" height="${2*r}"><defs><clipPath id="${id}"><path d="${d}"/></clipPath></defs>
 <g clip-path="url(#${id})"><path d="${d}" fill="url(#wood)"/><image href="${F.url}" x="${ix}" y="${iy}" width="${iw}" height="${ih}" preserveAspectRatio="none" opacity="1"/></g>
 <path d="${d}" fill="none" stroke="#5a3d28" stroke-width="${rim}" stroke-opacity=".85" clip-path="url(#${id})"/><path d="${d}" fill="none" stroke="#2a170a" stroke-opacity=".75" stroke-width="${Math.max(0.12,rim*0.45)}"/></svg>`,r,m,d};}
-function trayScale(f){const pr=d3.geoOrthographic().rotate([-f.c[0],-f.c[1]]).scale(1).translate([0,0]),b=d3.geoPath(pr).bounds(f);const m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1]);return 80/m;}
+function trayScale(f){const h=homeFeature(f),c0=h.c||f.c;const pr=d3.geoOrthographic().rotate([-c0[0],-c0[1]]).scale(1).translate([0,0]),b=d3.geoPath(pr).bounds(h);const m=Math.max(b[1][0]-b[0][0],b[1][1]-b[0][1],.04);return 80/m;}
 let anchorName=null;
-function buildSet(){if(carrying)dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));anchorName=null;const v=$('set').value;let names=feats.map(f=>f.name);
+const CONT_NEXT={'South America':['North America'],'North America':['South America'],'Europe':['Africa','Asia'],'Asia':['Europe','Africa','Oceania'],'Africa':['Europe','Asia'],'Oceania':['Asia'],'Antarctica':['South America'],'Europe/Asia':['Europe','Asia']};
+let opened=new Set(),batchAll=false,borderExtra=new Set();
+function contName(n){return (FACTS[n]||[''])[0];}
+function recomputeBatch(){const wasAll=batchAll,wasOpen=[...opened].sort().join('|'),wasBorder=[...borderExtra].sort().join('|');
+ borderExtra=new Set();if(!pieces||!placed.size){batchAll=false;opened=new Set();return {grew:false,all:false};}
+ if(placed.size/pieces.length>=0.5){batchAll=true;return {grew:!wasAll,all:!wasAll,label:'All the remaining pieces are in the tray'};}
+ batchAll=false;
+ if(MODE!=='prov'){for(const n of placed)opened.add(contName(n));
+  const byC={};for(const p of pieces){const c=contName(p.f.name);const s=byC[c]||(byC[c]={all:0,got:0});s.all++;if(placed.has(p.f.name))s.got++;}
+  let grow=true;while(grow){grow=false;for(const c of [...opened]){const s=byC[c];if(!s||!s.all||s.got/s.all<0.8)continue;for(const nx of (CONT_NEXT[c]||[]))if(!opened.has(nx)&&pieces.some(p=>contName(p.f.name)===nx)){opened.add(nx);grow=true;}}}}
+ for(const n of placed)for(const m of (neigh[n]||[]))if(!placed.has(m)&&pieces.some(p=>p.f.name===m))borderExtra.add(m);
+ const openNow=[...opened].sort().join('|'),borderNow=[...borderExtra].sort().join('|');
+ const grew=openNow!==wasOpen||borderNow!==wasBorder;
+ let label='';
+ if(MODE==='prov')label='Neighbours of the countries you have placed';
+ else label=[...opened].join(' · ')||'Next pieces';
+ if(borderExtra.size)label+=(label?' + ':'')+'borders';
+ return {grew,all:false,label};}
+function inBatch(p){if(!p||placed.has(p.f.name))return false;if(!placed.size||batchAll)return true;if(borderExtra.has(p.f.name))return true;if(MODE==='prov')return false;return opened.has(contName(p.f.name));}
+function shownPieces(){recomputeBatch();const loose=pieces.filter(p=>!placed.has(p.f.name)&&!p.parked&&!p.space&&!p.onBelt);
+ if(!placed.size)return loose.length<=40?loose:loose.slice(0,8);
+ return loose.filter(inBatch);}
+function queueTextures(){if(!pieces)return;const L=pieces.filter(p=>p.dloc==='L');
+ const pri=[];const push=p=>{if(p&&p.f&&!p.f._sharp&&!pri.includes(p))pri.push(p);};
+ L.slice(0,3).forEach(push);if(sel&&!placed.has(sel.f.name))push(sel);pieces.filter(p=>p.parked).slice(0,1).forEach(push);
+ pri.slice(0,3).forEach((p,i)=>wantSharp(p.f,i===0||p===sel));}
+function buildSet(){if(carrying)dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));anchorName=null;opened=new Set();batchAll=false;borderExtra=new Set();const v=$('set').value;let names=feats.map(f=>f.name);
  if(v=='starter')names=STARTER;else if(v=='Americas')names=names.filter(n=>/America/.test(FACTS[n][0]));
  else if(v=='Oceania')names=names.filter(n=>/Oceania|Antarctica/.test(FACTS[n][0]));else if(v!='all')names=names.filter(n=>FACTS[n][0].includes(v));
  placed.clear();G3.clear();provReset();for(const q of [...parked])unpark(q);anc=null;aui.innerHTML='';aui._h=null;hdl.style.display='none';G3.outline(null);pieces=d3.shuffle(names.map(n=>({f:byName[n],angle:(Math.random()*300+30)|0,hint:0})));sel=null;
  stripeTotal=pieces.reduce((s,p)=>s+cols(p.f.name).length,0)||1;$('tubeFill').innerHTML='';renderTray();updHints();progress();draw();}
 function cols(n){return (FLAGS[n]||[0,['#cccccc']])[1];}
 let trayJob=0;
-function renderTray(){const box=$('pieces');box.innerHTML='';const list=pieces.filter(p=>!placed.has(p.f.name)&&!p.parked);const job=++trayJob;let i=0;
+function renderTray(){const box=$('pieces');box.innerHTML='';const list=shownPieces();const job=++trayJob;let i=0;
  const step=()=>{if(job!==trayJob)return;const t0=performance.now();
   while(i<list.length&&performance.now()-t0<10){const p=list[i++];const d=document.createElement('div');d.className='piece'+(p===sel?' sel':'');d.dataset.name=p.f.name;
    const s=trayScale(p.f);d.innerHTML=shapeSVG(p.f,s).svg;const sv=d.firstChild;sv.setAttribute('width',86);sv.setAttribute('height',86);sv.style.transform=`rotate(${p.angle}deg)`;
@@ -143,7 +165,7 @@ function renderTray(){const box=$('pieces');box.innerHTML='';const list=pieces.f
  step();}
 function setAngle(p,a){p.angle=((a%360)+360)%360;if(p.parked&&!(anc&&anc.p===p)&&!placed.has(p.f.name)){scheduleFit(p);pokeCover(p);}
 if(p.ov)p.ov.firstChild.style.transform=`rotate(${p.angle}deg)`;if(anc&&anc.p===p&&anc.step==='rot'){clearTimeout(setAngle.t);setAngle.t=setTimeout(checkAnc,250);}if(p.el)p.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(p.body&&p.body.el&&p.body.el.firstChild)p.body.el.firstChild.style.transform=`rotate(${p.angle}deg)`;if(drag&&drag.p===p&&ghost.firstChild)ghost.firstChild.style.transform=`rotate(${p.angle}deg)`;updPoseNote();}
-function select(p){const prev=sel&&sel.f&&sel.f.name;sel=p;if(p&&p.f)wantSharp(p.f,true);if(!p||p.f.name!==prev){const ht=$('hintText');if(ht)ht.textContent='';const m=$('msg');if(m)m.style.display='none';if(p&&tgtF&&tgtF.name!==p.f.name)showTarget(null);}document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();updPoseNote();}
+function select(p){const prev=sel&&sel.f&&sel.f.name;sel=p;if(p&&p.f)wantSharp(p.f,true);if(p&&p.f&&!placed.has(p.f.name))showMystery(p);else if(!p)hidePlaceTab();if(!p||p.f.name!==prev){const ht=$('hintText');if(ht)ht.textContent='';const m=$('msg');if(m)m.style.display='none';if(p&&tgtF&&tgtF.name!==p.f.name)showTarget(null);}document.querySelectorAll('.piece').forEach(x=>x.classList.toggle('sel',x.dataset.name==p.f.name));updHints();updPoseNote();}
 // drag
 let drag=null,ghost=null;
 function pieceScale(p){if(p.s==null)p.s=boxScale(p.f);return p.s;}
@@ -308,7 +330,7 @@ function dropHint(p,j){const n=p.f.name;const size=j.bigger?'make '+n+' bigger':
  if(j.why==='almost'){let t='Almost: '+j.pct+'% covered, move it a bit.';if(j.sizeOk===false)t+=' Also '+size+'.';if(j.angOk===false)t+=' Turn it so north is up.';return t;}
  return 'Not on '+n+' yet. '+j.pct+'% covered.';}
 function noteHint(t){const ht=$('hintText');if(ht)ht.textContent=t;}
-function poseNote(p){if(!p)return '';const s=pieceScale(p),n=p.f.name,a=Math.abs(angOff(p.angle)),bits=[];
+function poseNote(p){if(!p)return '';const s=pieceScale(p),n=placed.has(p.f.name)?p.f.name:'This piece',a=Math.abs(angOff(p.angle)),bits=[];
  if(a>18)bits.push(n+' is turned. Use ⟲ ⟳, or the Orientationator, so north is up.');
  if(s<0.82)bits.push(n+' is too small for the globe. Drag the corner handle outward, or use the Sizeinator.');
  else if(s>1.22)bits.push(n+' is too big for the globe. Drag the corner handle inward, or use the Sizeinator.');
@@ -319,7 +341,9 @@ function showTarget(f){tgtF=f||null;if(!tgtF){tgtRing.style.display='none';if(wi
 function tickTarget(){if(!tgtF||!window.G3){tgtRing.style.display='none';return;}if(!G3.facing(tgtF.c[0],tgtF.c[1])){tgtRing.style.display='none';return;}
  const [x,y]=G3.project(tgtF.c[0],tgtF.c[1]),rad=Math.max(28,G3.screenRadius()*Math.max(tgtF.rad||.04,.035));
  tgtRing.style.display='block';tgtRing.style.left=x+'px';tgtRing.style.top=y+'px';tgtRing.style.width=tgtRing.style.height=(rad*2)+'px';}
-function place(p,inJoin){if(tgtF&&p.f&&tgtF.name===p.f.name)showTarget(null);placed.add(p.f.name);if(p._lab){p._lab.remove();p._lab=null;}paySnap(p);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);if(p.parked)select(p);else sel=null;renderTray();updHints();updPoseNote();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length))setTimeout(maybeWin,900);}
+function place(p,inJoin){if(tgtF&&p.f&&tgtF.name===p.f.name)showTarget(null);const first=!placed.size;placed.add(p.f.name);if(p._lab){p._lab.remove();p._lab=null;}paySnap(p);if(MODE==='prov'){G3.fog(p.f);openProv(p.f.name);}else G3.reveal(p.f,FACTS[p.f.name][0],muted);setTimeout(()=>stinger(p.f.name),250);if(p.parked)select(p);else sel=null;const info=recomputeBatch();renderTray();updHints();updPoseNote();progress();draw();celebrate(p.f.name);setTimeout(()=>spawnPlaceCoins(p),180);if(!inJoin)joinParked();
+ if(info.all)say(info.label,2800);else if(info.grew&&!first)say('New pieces: '+info.label,2800);
+ if(placed.size==pieces.length&&pieces.length&&!(MODE==='prov'&&provOpen.length))setTimeout(maybeWin,900);}
 function anchorBlocked(p){return !!(p&&((anc&&anc.p===p)||(anchorName&&p.f.name===anchorName)));}
 function repaintPlaced(){if(!window.G3)return;G3.clear();for(const n of placed){const f=byName[n];if(!f)continue;if(MODE==='prov')G3.fog(f);else G3.placeNow(f,(FACTS[n]||[''])[0]);}
  if(MODE==='prov'&&GEOP){for(const n of placed)for(const pf of (GEOP.PV[n]||[]))if(provPlaced.has(provKey(pf)))G3.provNow(pf,(FACTS[n]||[''])[0]);}}
@@ -338,6 +362,9 @@ function updCountriesUI(){const b=$('countriesB'),nEl=$('countriesN'),d=$('count
   if(!list.length){d.innerHTML='<div class="empty">No countries placed yet</div>';return;}
   d.innerHTML=list.map(n=>`<button type="button" role="option" data-n="${n.replace(/"/g,'&quot;')}">${prettyCountry(n)}</button>`).join('');
   d.querySelectorAll('button').forEach(btn=>btn.onclick=e=>{e.stopPropagation();openCountryCard(btn.dataset.n);});}
+function showMystery(p){const tab=$('placeTab');if(!tab||!p||!p.f)return;clearTimeout(placeTabTimer);closeCountriesDrop();
+ tab.innerHTML='<div class="ptIn"><span class="ptFlag qflag">?</span><div class="ptBody"><strong>?????</strong><span>🏛️ ? · ?</span><span>⭐ ?</span><div class="ptSlots"><i>Hint</i><i>Hint</i><i>Hint</i></div></div></div>';
+ tab.dataset.n='';tab.hidden=false;tab.classList.add('on');tab.onclick=null;}
 function showPlaceTab(n){const tab=$('placeTab');if(!tab||!FACTS[n])return;clearTimeout(placeTabTimer);closeCountriesDrop();
   const f=FACTS[n],fl=FLAGS[n];const flag=fl?`<img class="ptFlag" alt="" src="flags/${fl[0]}.svg">`:'<span class="ptFlag"></span>';
   tab.innerHTML=`<div class="ptIn">${flag}<div class="ptBody"><strong>${prettyCountry(n)}</strong><span>🏛️ ${f[1]} · ${f[0]}</span><span>⭐ ${f[2]}</span><div class="ptHint">Tap for the full card</div></div></div>`;
@@ -352,7 +379,7 @@ function showPlaceTab(n){const tab=$('placeTab');if(!tab||!FACTS[n])return;clear
   tab.onclick=e=>{e.stopPropagation();openCountryCard(n);};
   placeTabTimer=setTimeout(()=>hidePlaceTab(),5000);updCountriesUI();}
 function openCountryCard(n){if(!FACTS[n])return;hidePlaceTab();closeCountriesDrop();showCard(n);}
-function celebrate(n){const gen=++celebGen;updCountriesUI();const fl=FLAGS[n];const pop=$('flagPop');
+function celebrate(n){hidePlaceTab();const gen=++celebGen;updCountriesUI();const fl=FLAGS[n];const pop=$('flagPop');
   // Never auto-open the blocking full card — show a small tab under Countries instead.
   if(!fl){if(gen===celebGen)showPlaceTab(n);return;}
   $('flagImg').src='flags/'+fl[0]+'.svg';pop.hidden=false;
@@ -423,7 +450,9 @@ function setMode(m){MODE=m;const g=m==='prov'?GEOP:GEO110;feats=g.feats;byName=g
   fetch('data/europe-africa-hd.json').then(r=>r.json()).then(applyCoasts),
   fetch('data/rest-of-world-hd.json').then(r=>r.json()).then(applyCoasts)
  ]).catch(()=>{});
- Promise.all([hqReady,sharpenCoasts]).then(()=>{buildSet();window.__ready=true;dispatchEvent(new Event('gameready'));});});
+ const boot=document.getElementById('boot');
+ hqReady.then(()=>{buildSet();window.__ready=true;dispatchEvent(new Event('gameready'));if(boot)boot.remove();
+  sharpenCoasts.then(()=>{if(!pieces)return;for(const p of pieces){p.f._face=null;p.f._sharp=false;p._sh=null;}renderTray();});});});
 window.__shape=f=>shapeSVG(f,trayScale(f)).svg;window.__game={park:(n,lon,lat,s,a)=>{const q=pieces.find(q=>q.f.name==n);q.angle=a||0;park(q,[lon,lat],s||1)},unpark:n=>unpark(pieces.find(q=>q.f.name==n)),get anc(){return anc},get parked(){return parked},get pieces(){return pieces},get placed(){return placed},place:n=>place(pieces.find(p=>p.f.name==n)),spinTo,feat:n=>byName[n],drop:(n,x,y)=>drop(pieces.find(p=>p.f.name==n),x,y)};
 // ---- placed-countries screen: one borderless translucent panel, stacked thin tabs, pointer line to the country ----
 var scr=document.createElement('div');scr.id='scr';scr.innerHTML='<div class="sh">Placed</div><div id="scrL"></div>';$('stage').appendChild(scr);
@@ -490,9 +519,9 @@ function remBody(p){const b=p.body;if(!b)return;for(const s in DR){const o=DR[s]
 function hullOf(P){P=P.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lo=[],up=[];
  for(const p of P){while(lo.length>1&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}for(let i=P.length-1;i>=0;i--){const p=P[i];while(up.length>1&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
  up.pop();lo.pop();return lo.concat(up);}
-function bodyShape(p){if(p._sh&&p._sh.a===p.angle)return p._sh;const sc=trayScale(p.f)*PS/86,pr=d3.geoOrthographic().rotate([-p.f.c[0],-p.f.c[1]]).scale(sc).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
- const b=gp.bounds(p.f),r=Math.max(Math.abs(b[0][0]),Math.abs(b[0][1]),Math.abs(b[1][0]),Math.abs(b[1][1]))+3,k=PS/(2*r),an=p.angle*Math.PI/180,ca=Math.cos(an),sa=Math.sin(an);
- const parts=(gp(p.f)||'').split('M').filter(Boolean).map(seg=>(seg.match(/-?[\d.]+(?:e-?\d+)?/g)||[]).map(Number)).map(n=>{const q=[];for(let i=0;i+1<n.length;i+=2){const x=n[i]*k,y=n[i+1]*k;q.push([x*ca-y*sa,x*sa+y*ca]);}return q;}).filter(q=>q.length>2);
+function bodyShape(p){if(p._sh&&p._sh.a===p.angle)return p._sh;const h=homeFeature(p.f),c0=h.c||p.f.c,sc=trayScale(p.f)*PS/86,pr=d3.geoOrthographic().rotate([-c0[0],-c0[1]]).scale(sc).translate([0,0]).clipAngle(90),gp=d3.geoPath(pr);
+ const b=gp.bounds(h),r=Math.max(Math.abs(b[0][0]),Math.abs(b[0][1]),Math.abs(b[1][0]),Math.abs(b[1][1]))+3,k=PS/(2*r),an=p.angle*Math.PI/180,ca=Math.cos(an),sa=Math.sin(an);
+ const parts=(gp(h)||'').split('M').filter(Boolean).map(seg=>(seg.match(/-?[\d.]+(?:e-?\d+)?/g)||[]).map(Number)).map(n=>{const q=[];for(let i=0;i+1<n.length;i+=2){const x=n[i]*k,y=n[i+1]*k;q.push([x*ca-y*sa,x*sa+y*ca]);}return q;}).filter(q=>q.length>2);
  let hs=parts.map(hullOf).filter(h=>h.length>2).map(h=>({h,a:Math.abs(h.reduce((s,p,i)=>{const q=h[(i+1)%h.length];return s+p[0]*q[1]-q[0]*p[1]},0))/2}));
  const mx=Math.max(1,...hs.map(o=>o.a));hs=hs.filter(o=>o.a>mx*.08).sort((a,b)=>b.a-a.a).slice(0,4).map(o=>o.h);if(!hs.length)hs=[[[-8,-8],[8,-8],[8,8],[-8,8]]];
  const all=hs.flat();p._sh={a:p.angle,hs,x0:Math.min(...all.map(v=>v[0])),x1:Math.max(...all.map(v=>v[0])),y0:Math.min(...all.map(v=>v[1])),y1:Math.max(...all.map(v=>v[1]))};
@@ -586,16 +615,17 @@ function recallOrbiters(){const list=orbiters();if(!list.length)return 0;const W
  say('Returned '+list.length+' to the pieces tray',1600);return list.length;}
 $('orbitHi').addEventListener('click',()=>{if(!orbiters().length)return;orbitHi=!orbitHi;updOrbitUI();syncOrbitPips();});
 $('orbitBack').addEventListener('click',()=>{if(!orbiters().length)return;recallOrbiters();});
-function drawStack(){const L=pieces.filter(p=>p.dloc==='L');stk.innerHTML=L.slice(0,4).map((p,i)=>`<div class="sp" style="transform:translate(${i*2}px,${-i*3}px) rotate(${(i*37)%20-10}deg)">${shapeSVG(p.f,trayScale(p.f)*.6).svg}</div>`).join('')+`<b>${L.length}</b>`;stk.classList.toggle('empty',!L.length);}
+function drawStack(){const L=pieces.filter(p=>p.dloc==='L');stk.innerHTML=L.slice(0,4).map((p,i)=>`<div class="sp" style="transform:translate(${i*2}px,${-i*3}px) rotate(${(i*37)%20-10}deg)">${shapeSVG(p.f,trayScale(p.f)*.6).svg}</div>`).join('')+`<b>${L.length}</b>`;stk.classList.toggle('empty',!L.length);stk.dataset.batch=!placed.size?'Draw the first piece':(batchAll?'All remaining pieces':([...opened].join(', ')||'Neighbours'));}
 stk.addEventListener('pointerdown',e=>{e.preventDefault();const L=pieces.filter(p=>p.dloc==='L');if(!L.length)return;stk.animate([{transform:'scale(1)'},{transform:'scale(.86,.8)'},{transform:'scale(1)'}],{duration:220});knock(.12,300);carry(L[0],e,stk);});
 let syncJob=0;
-function syncDrawers(){if(!pieces)return;const W=innerWidth;for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p))remBody(b.p);
- const todo=[];for(const p of pieces){const gone=placed.has(p.f.name)||p.parked||p.space||p.onBelt;if(gone&&p.body)remBody(p);else if(!gone&&!p.body&&carrying!==p)todo.push(p);}
+function syncDrawers(){if(!pieces)return;const W=innerWidth;const allow=new Set(shownPieces().map(p=>p.f.name));
+ for(const s in DR)for(const b of [...DR[s].bodies])if(!pieces.includes(b.p)||!allow.has(b.p.f.name))remBody(b.p);
+ const todo=[];for(const p of pieces){if(!allow.has(p.f.name))continue;const gone=placed.has(p.f.name)||p.parked||p.space||p.onBelt;if(gone&&p.body)remBody(p);else if(!gone&&!p.body&&carrying!==p)todo.push(p);}
  const job=++syncJob;let i=0;
  const step=()=>{if(job!==syncJob||!pieces)return;let budget=8;const t0=performance.now();
   while(i<todo.length&&budget>0&&performance.now()-t0<14){const p=todo[i++];if(p.body||carrying===p||placed.has(p.f.name)||p.parked||p.space||p.onBelt)continue;
    const fresh=hiRes(p.f.name)&&!p.f._face;addBody('L',p,40+Math.random()*(W-80),40+Math.random()*(innerHeight-120),false);budget-=fresh?6:1;}
-  drawStack();if(i<todo.length)requestAnimationFrame(step);};
+  drawStack();if(i<todo.length)requestAnimationFrame(step);else queueTextures();};
  step();}
 const _rt=renderTray;renderTray=function(){_rt();if(typeof DR!=='undefined')syncDrawers();};
 addEventListener('resize',()=>{layoutSecs();for(const s in DR){const o=DR[s];setOpen(o,o.open);for(const b of o.bodies)clampB(o,b);}kick();});layoutSecs();
@@ -658,8 +688,8 @@ function beepMach(){try{const ctx=dac()||DAC;if(!ctx)return;const o=ctx.createOs
 function coinTreePx(){const R=(window.G3&&G3.screenRadius)?G3.screenRadius():240;return Math.max(10,Math.min(16,R*0.042));}
 // Hi-res per-angle coin textures (≥512px); linear scale via CSS image-rendering:auto
 const COIN_FRAMES=Array.from({length:8},(_,i)=>'img/coin-f'+i+'.png?v=coins3');
-COIN_FRAMES.forEach(u=>{const im=new Image();im.src=u;});
-function burstCoinsAt(x,y,n,credit){n=n||5;const zoom=Math.max(.55,Math.min(1.15,(window.G3&&G3.screenRadius?G3.screenRadius():220)/280));
+let coinLoaded=false;function ensureCoins(){if(coinLoaded)return;coinLoaded=true;COIN_FRAMES.forEach(u=>{const im=new Image();im.src=u;});}
+function burstCoinsAt(x,y,n,credit){ensureCoins();n=n||5;const zoom=Math.max(.55,Math.min(1.15,(window.G3&&G3.screenRadius?G3.screenRadius():220)/280));
  const tree=coinTreePx(),peakLift=tree*2; // hover peak ≈ twice treetops above the country surface
  for(let i=0;i<n;i++){const el=document.createElement('div');el.className='coinFly';const sz=Math.round(16+10*zoom);el.style.width=sz+'px';el.style.height=sz+'px';el.style.margin=(-sz/2)+'px 0 0 '+(-sz/2)+'px';
   el.style.backgroundSize='100% 100%';el.style.backgroundPosition='0 0';
@@ -931,12 +961,13 @@ async function loadGame(S){if(!S||!S.pieces)return false;cancelHeld();for(const 
  G3.setQuat(S.quat);
  anchorName=S.anchorName||(S.anc&&S.anc.n)||(S.placed&&S.placed[0])||null;
  for(const n of S.placed){const p=byN[n];if(!p)continue;placed.add(n);if(MODE==='prov')G3.fog(p.f);else G3.placeNow(p.f,FACTS[n][0]);for(const c of cols(n)){const st=document.createElement('div');st.className='stripe';st.style.background=c;st.style.width=(100/stripeTotal)+'%';st.style.height='100%';$('tubeFill').appendChild(st);}}
+ recomputeBatch();
  if(MODE==='prov'){const K=new Set(S.provPlaced||[]);for(const n of S.placed)for(const pf of GEOP.PV[n]||[])if(K.has(provKey(pf)))placeProv(pf,true);
   provFind=Object.assign({},S.provFind||{});
   for(const n of (S.provOpen||[]))openProv(n,true);}
  for(const q of S.pieces)if(q.st==='parked')park(byN[q.n],[q.lon,q.lat],q.s);
  if(S.anc){const p=byN[S.anc.n];if(p&&p.parked){anc={p,step:S.anc.step};p.ov.classList.add('anc');p.ov.style.cursor='default';p.ov.addEventListener('pointerdown',ancDown);if(anc.step==='lat')G3.outline(p.f);else if(anc.step==='blink')nextStep();}}
- for(const q of S.pieces){const p=byN[q.n];if(!p)continue;if(q.st==='space'){if(q.orb)restoreOrbit(p,q.orb);else addSpace(p,q.x||innerWidth/2,q.y||innerHeight/2,q.vx||0,q.vy||0,q.smode||'float');}else if(q.st==='L'||q.st==='R'){if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}}
+ for(const q of S.pieces){const p=byN[q.n];if(!p||(placed.size&&!inBatch(p)&&q.st!=='space'&&q.st!=='parked'))continue;if(q.st==='space'){if(q.orb)restoreOrbit(p,q.orb);else addSpace(p,q.x||innerWidth/2,q.y||innerHeight/2,q.vx||0,q.vy||0,q.smode||'float');}else if(q.st==='L'||q.st==='R'){if(q.x==null){if(!p.body)addBody('L',p,40+Math.random()*(innerWidth-80),40+Math.random()*(innerHeight-120),false);continue}const b=addBody(q.st,p,q.x,q.y,false,q.sec);b.vx=b.vy=0;}}
  DR.L.glide=DR.R.glide=0;DR.L.open=Math.max(0,Math.min(innerWidth-44,S.drawers.L||0));DR.R.open=Math.max(0,Math.min(boardBox().h,S.drawers.R||0));for(const s in DR){DR[s].pv=DR[s].open;DR[s].v=0;}
  sel=null;renderTray();for(const s in DR)for(const b of DR[s].bodies){b.vx=b.vy=0;}
  if(S.cam)G3.setCam(S.cam);updHints();progress();hidePlaceTab();closeCountriesDrop();updCountriesUI();updOrbitUI();kick();toast('Game loaded');return true;}

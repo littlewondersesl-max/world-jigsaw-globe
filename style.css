@@ -203,6 +203,11 @@ body{background:#07101e}header{background:#0f1a2c}#hints{background:#122238}
 #placeTab .ptBody strong{display:block;font:700 13px/1.2 system-ui,sans-serif;margin:0 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #placeTab .ptBody span{display:block;font:12px/1.35 system-ui,sans-serif;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #placeTab .ptHint{font:10px/1 system-ui,sans-serif;opacity:.5;margin-top:4px}
+#placeTab .qflag{display:flex;align-items:center;justify-content:center;width:36px;height:24px;border-radius:3px;background:#efe6d2;color:#8a7460;font:800 16px/1 system-ui,sans-serif;flex:none}
+#placeTab .ptSlots{display:flex;gap:4px;margin-top:6px}
+#placeTab .ptSlots i{flex:1;height:16px;border-radius:4px;background:#efe6d2;border:1px dashed #c8b48a;font:700 9px/16px system-ui,sans-serif;text-align:center;color:#b09a78;font-style:normal}
+#boot{position:fixed;inset:0;z-index:12000;display:flex;align-items:center;justify-content:center;background:#07101e;color:#f3e6d3;font:600 22px system-ui,sans-serif}
+#boot[hidden]{display:none}
 #card{cursor:default}
 #card .cardIn{cursor:default;max-height:min(80vh,560px);overflow:auto}
 
