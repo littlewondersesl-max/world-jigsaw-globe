@@ -208,7 +208,7 @@ function pieceEdited(p){return Math.abs((p.s||1)-1)>.03||Math.abs(angOff(p.angle
 function posOv(p){const o=p.ov;if(!o)return;const show=!placed.has(p.f.name)||pieceEdited(p);
  G3.pc.set(p.pid,{lon:p.lon,lat:p.lat,s:p.s||1,a:p.angle,op:p.op??1,vis:show&&!(drag&&drag.p===p)});if(!G3.facing(p.lon,p.lat)){if(o._d!=='none'){o.style.display='none';o._d='none';}if(p._lab)p._lab.style.display='none';return}if(o._d!==''){o.style.display='';o._d='';}const [x,y]=G3.project(p.lon,p.lat);
  const k=G3.screenRadius()*(p.s||1)/K;const tf=`translate(${(x-o.r).toFixed(1)}px,${(y-o.r).toFixed(1)}px) scale(${k.toFixed(4)})`;if(o._tf!==tf){o.style.transform=tf;o._tf=tf;}o.style.opacity=show?'1':'0';o.style.pointerEvents=show&&!placed.has(p.f.name)?'auto':'none';p.sx=x;p.sy=y;p.spx=o.r*k;
- if(!placed.has(p.f.name)&&show){o.classList.add('loose');if(!p._lab){p._lab=document.createElement('div');p._lab.className='looseLab';p._lab.textContent=p.f.name+': …';document.body.appendChild(p._lab);pokeCover(p);}const live=p.f.name+': '+(p._pct==null?'…':p._pct+'% covered');if(p._lab.textContent!==live)p._lab.textContent=live;p._lab.style.display='';p._lab.style.left=x+'px';p._lab.style.top=(y-Math.max(28,o.r*k)-6)+'px';}
+ if(!placed.has(p.f.name)&&show){o.classList.add('loose');o.title='This piece';if(!p._lab){p._lab=document.createElement('div');p._lab.className='looseLab';p._lab.textContent='This piece: …';document.body.appendChild(p._lab);pokeCover(p);}const live='This piece: '+(p._pct==null?'…':p._pct+'% covered');if(p._lab.textContent!==live)p._lab.textContent=live;p._lab.style.display='';p._lab.style.left=x+'px';p._lab.style.top=(y-Math.max(28,o.r*k)-6)+'px';}
  else {o.classList.remove('loose');if(p._lab)p._lab.style.display='none';}}
 let hdlReady=false;
 function editHandle(){if(!hdlReady)return;const p=sel&&sel.parked&&sel.spx?sel:null;if(!p){if(!(anc&&anc.step==='scale'))hdl.style.display='none';return;}
@@ -218,15 +218,15 @@ function editHandle(){if(!hdlReady)return;const p=sel&&sel.parked&&sel.spx?sel:n
 const aui=document.createElementNS('http://www.w3.org/2000/svg','svg');aui.id='aui';document.body.appendChild(aui);
 const angOff=a=>{a=((a%360)+360)%360;return a>180?a-360:a};
 function startAnchor(p,ll){park(p,ll,boxScale(p.f));anchorName=p.f.name;anc={p,step:'blink'};sel=p;updHints();p.ov.classList.add('anc');p.ov.style.cursor='default';
- const cont=FACTS[p.f.name][0];say(`⚓ Anchor: ${p.f.name}. The world is built around it.`,2600);{const t0=performance.now();(function bl(){const t=(performance.now()-t0)/1400;if(t>=1||!p.ov){p.op=1;return}p.op=.25+.75*(.5+.5*Math.cos(t*Math.PI*6));requestAnimationFrame(bl);})();}
+ say('⚓ Anchor: This piece. The world is built around it.',2600);{const t0=performance.now();(function bl(){const t=(performance.now()-t0)/1400;if(t>=1||!p.ov){p.op=1;return}p.op=.25+.75*(.5+.5*Math.cos(t*Math.PI*6));requestAnimationFrame(bl);})();}
 
  setTimeout(()=>nextStep(),1500);p.ov.addEventListener('pointerdown',ancDown);}
 function latTol(f){return Math.max(6,(f.rad||.05)*180/Math.PI*.85);}
-function nextStep(){const p=anc.p;if(Math.abs(p.s-1)>.4){anc.step='scale';say(p.s<1?'Make '+p.f.name+' a bit bigger with the corner handle.':'Make '+p.f.name+' a bit smaller with the corner handle.',3500);return}p.s=1;
- if(Math.abs(angOff(p.angle))>angTol(p.f)){anc.step='rot';say('Turn '+p.f.name+' so north is up.',3500);return}setAngle(p,0);
+function nextStep(){const p=anc.p;if(Math.abs(p.s-1)>.4){anc.step='scale';say(p.s<1?'Make this piece a bit bigger with the corner handle.':'Make this piece a bit smaller with the corner handle.',3500);return}p.s=1;
+ if(Math.abs(angOff(p.angle))>angTol(p.f)){anc.step='rot';say('Turn this piece so north is up.',3500);return}setAngle(p,0);
  const d=p.f.c[0]-p.lon;G3.offsetLon(-d);for(const q of parked)q.lon=((q.lon+d+540)%360)-180;p.lon=p.f.c[0];
  if(Math.abs(p.lat-p.f.c[1])<=latTol(p.f)){const q=p;anc=null;aui.innerHTML='';aui._h=null;G3.outline(null);place(q);select(q);say(q.f.name+' placed',1800);return;}
- anc.step='lat';G3.outline(p.f);say('Slide '+p.f.name+' north or south onto its country.',3500);}
+ anc.step='lat';G3.outline(p.f);say('Slide this piece north or south onto its country.',3500);}
 function ancDown(e){if(!anc||anc.p.ov!==e.currentTarget&&e.currentTarget!==hdl)return;e.preventDefault();e.stopPropagation();const p=anc.p,st=anc.step;if(st==='blink')return;
  const el=e.currentTarget;el.setPointerCapture(e.pointerId);const cx=p.sx,cy=p.sy,d0=Math.hypot(e.clientX-cx,e.clientY-cy)||1,s0=p.s,a0=p.angle,t0=Math.atan2(e.clientY-cy,e.clientX-cx);
  el.onpointermove=ev=>{if(pin)return;if(st==='scale')p.s=Math.max(.05,Math.min(8,s0*Math.hypot(ev.clientX-cx,ev.clientY-cy)/d0));
@@ -307,7 +307,7 @@ function judge(p,ll){const f=p.f,s=pieceScale(p),ang=angOff(p.angle);
  if(atPose>=.28||actual>=.28||dist<reach*1.4) return {ok:false,why:'almost',pct,atPose,actual,sizeOk,bigger:s<1,angOk};
  return {ok:false,why:'miss',pct,atPose,actual};}
 let coverRaf=0;
-function pokeCover(p){if(p)p._coverDirty=true;if(coverRaf)return;coverRaf=requestAnimationFrame(()=>{coverRaf=0;for(const q of parked){if(!q._coverDirty||placed.has(q.f.name))continue;q._coverDirty=false;const j=judge(q,[q.lon,q.lat]);q._pct=j.pct;if(q._lab)q._lab.textContent=q.f.name+': '+j.pct+'% covered';}});}
+function pokeCover(p){if(p)p._coverDirty=true;if(coverRaf)return;coverRaf=requestAnimationFrame(()=>{coverRaf=0;for(const q of parked){if(!q._coverDirty||placed.has(q.f.name))continue;q._coverDirty=false;const j=judge(q,[q.lon,q.lat]);q._pct=j.pct;if(q._lab)q._lab.textContent='This piece: '+j.pct+'% covered';}});}
 function fits(p,ll){return judge(p,ll).ok;}
 function revealPlaced(p){if(!p||placed.has(p.f.name))return;place(p,true);}
 function scheduleFit(p){if(!p)return;clearTimeout(p._fitT);p._fitT=setTimeout(()=>{if(!p.parked||placed.has(p.f.name)||(anc&&anc.p===p))return;if(fits(p,[p.lon,p.lat]))snapIn(p);else updPoseNote();},280);}
@@ -323,14 +323,15 @@ function drop(p,x,y){const r=G3.dom.getBoundingClientRect();const ll=(x<r.left||
  if(j.why==='miss'){if(p.parked)unpark(p);const W=innerWidth;addBody('L',p,40+Math.random()*(Math.max(80,W*.3)),50+Math.random()*(Math.max(80,innerHeight*.35)),true);renderTray();const st=document.getElementById('stack');if(st)st.animate([{transform:'scale(1)'},{transform:'scale(1.08)'},{transform:'scale(1)'}],{duration:280});say(hint+' Back in the stack — take it and try again.',4200);noteHint(hint);return;}
  park(p,ll,pieceScale(p));if(p.ov)p.ov.classList.add('loose');pokeCover(p);if(isTiny(p.f))showTarget(p.f);
  say(hint+' It is on the globe — drag it to fix it.',4200);noteHint(hint);}
-function dropHint(p,j){const n=p.f.name;const size=j.bigger?'make '+n+' bigger':'make '+n+' smaller';
+function pieceWord(p){return p&&p.f&&placed.has(p.f.name)?p.f.name:'This piece';}
+function dropHint(p,j){const n=pieceWord(p);const size=j.bigger?'make '+n.toLowerCase()+' bigger':'make '+n.toLowerCase()+' smaller';
  if(j.why==='both')return 'Right place, '+size+', then turn it so north is up.';
  if(j.why==='size')return 'Right place, '+size+'.';
- if(j.why==='angle')return 'Right place, turn '+n+' so north is up.';
+ if(j.why==='angle')return 'Right place, turn '+n.toLowerCase()+' so north is up.';
  if(j.why==='almost'){let t='Almost: '+j.pct+'% covered, move it a bit.';if(j.sizeOk===false)t+=' Also '+size+'.';if(j.angOk===false)t+=' Turn it so north is up.';return t;}
- return 'Not on '+n+' yet. '+j.pct+'% covered.';}
+ return 'Not on its country yet. '+j.pct+'% covered.';}
 function noteHint(t){const ht=$('hintText');if(ht)ht.textContent=t;}
-function poseNote(p){if(!p)return '';const s=pieceScale(p),n=placed.has(p.f.name)?p.f.name:'This piece',a=Math.abs(angOff(p.angle)),bits=[];
+function poseNote(p){if(!p)return '';const s=pieceScale(p),n=pieceWord(p),a=Math.abs(angOff(p.angle)),bits=[];
  if(a>18)bits.push(n+' is turned. Use ⟲ ⟳, or the Orientationator, so north is up.');
  if(s<0.82)bits.push(n+' is too small for the globe. Drag the corner handle outward, or use the Sizeinator.');
  else if(s>1.22)bits.push(n+' is too big for the globe. Drag the corner handle inward, or use the Sizeinator.');
@@ -413,8 +414,9 @@ function updHints(){const p=sel;$('sel').innerHTML=p?`Piece selected. Hints used
  ['h1','h2','h3'].forEach((h,i)=>$(h).disabled=!p||p.hint<i);if(!p){const ht=$('hintText');if(ht)ht.textContent='';updPoseNote();}}
 $('h1').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,1);setAngle(p,0);$('hintText').innerHTML='⬆️ This way is UP (north). I turned the piece for you!';updHints();};
 $('h2').onclick=()=>{const p=sel;if(!p)return;p.hint=Math.max(p.hint,2);const n=p.f.name,f=FACTS[n],nb=(neigh[n]||[]);
- $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${f[5]}`;updHints();};
-$('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c);showTarget(p.f);$('hintText').textContent='The yellow ring stays on '+p.f.name+' until you place it or pick another piece. The whole globe stays in view.';updHints();updPoseNote();};
+ const clue=String(f[5]||'').replace(new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'),'this piece');
+ $('hintText').innerHTML=`<b>Continent:</b> ${f[0]}<br>${nb.length?'<b>Neighbours:</b> '+nb.slice(0,5).join(', '):'<b>No land neighbours</b> – it has sea all around.'}<br>💡 ${clue}`;updHints();};
+$('h3').onclick=()=>{const p=sel;if(!p)return;p.hint=3;spinTo(p.f.c);showTarget(p.f);$('hintText').textContent='The yellow ring stays on this piece until you place it or pick another piece. The whole globe stays in view.';updHints();updPoseNote();};
 let natureOn=true;
 $('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';if(window.G3&&G3.setNatureMute)G3.setNatureMute(muted);};
 const SETVIEW={Africa:[20,2],Asia:[90,30],Europe:[15,50],Americas:[-80,8],Oceania:[150,-25]};
