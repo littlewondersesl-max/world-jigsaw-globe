@@ -3,7 +3,7 @@
 // (towns, trees, rivers) and drops it again when you zoom out. Rio's hand-built model still loads up close.
 import * as THREE from 'three';
 import {OrbitControls} from './previews/brazil/OrbitControls.js';import {loadCity} from './previews/lib/city.js';import {CITIES} from './previews/lib/cities.js';
-import {attachSADetail} from './detail/sa-detail.js?v=sa24';
+import {attachSADetail} from './detail/sa-detail.js?v=sa26';
 const P='previews/brazil/';
 const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});R.setPixelRatio(Math.min(1.5,devicePixelRatio));
 R.toneMapping=THREE.ACESFilmicToneMapping;R.domElement.id='globe';host.prepend(R.domElement);
@@ -97,7 +97,12 @@ gl_FragColor=vec4(pow(col,vec3(1./2.2)),c.a);}`}));land.renderOrder=1;G.add(land
 // three.js sphere uv: u=0 at lon=-180 (x=-1?) -> equirect: u=(lon+180)/360, v=(lat+90)/180 flipped for canvas
 const eq=(w,h)=>d3.geoEquirectangular().scale(w/(2*Math.PI)).translate([w/2,h/2]).precision(.1);
 const PAL={"Africa":["#c9a86a","#a3925a"],"Asia":["#a9a46e","#8f9a62"],"Europe":["#7f9a5e","#6d8a52"],"North America":["#8ea062","#7b9156"],"South America":["#6f9a55","#5f8a4a"],"Oceania":["#c7a26a","#b49460"],"Antarctica":["#eef2f4","#dde5ea"],"Europe/Asia":["#8f9c62","#7f8e58"]};
-const WTI=new Image();WTI.src='pieces_world.jpg';await WTI.decode().catch(()=>{});
+const WTI=window.__worldPhoto||new Image();if(!WTI.getAttribute('src'))WTI.src='pieces_world.jpg';window.__worldPhoto=WTI;
+// Draw the ocean immediately. Brazil, South America and the close-up wait until after the first frames.
+let viewLive=false;
+R.setAnimationLoop(now=>{U.t.value=now/1000;if(!viewLive){if(skyNear.visible)sunBoard.lookAt(C.position);R.render(S,C);return;}
+ anims=anims.filter(a=>!a(now));if(LU.pm.value>.5){if(heldTarget)LU.pa.value=.62+.34*Math.sin(now/180);else if(now<pulseEnd)LU.pa.value=.35+.35*Math.sin(now/150);else{LU.pm.value=0;LU.pa.value=0;paintMark(null);}}
+ O.update();lod();if(skyNear.visible)sunBoard.lookAt(C.position);labels();R.render(S,C);});
 function paint(ctx,w,h,f,cont,glow){const pr=eq(w,h),gp=d3.geoPath(pr,ctx);const pal=PAL[cont]||["#9a9a70","#888"];
  ctx.save();ctx.beginPath();gp(f);ctx.clip();const b=gp.bounds(f);
  const g=ctx.createLinearGradient(0,b[0][1],0,b[1][1]);g.addColorStop(0,pal[0]);g.addColorStop(1,pal[1]);ctx.fillStyle=g;ctx.fillRect(b[0][0]-2,b[0][1]-2,b[1][0]-b[0][0]+4,b[1][1]-b[0][1]+4);if(WTI.complete&&WTI.naturalWidth)ctx.drawImage(WTI,0,0,w,h);
@@ -111,8 +116,10 @@ const sv=(lo,la)=>{lo=THREE.MathUtils.degToRad(lo);la=THREE.MathUtils.degToRad(l
 land.rotation.y=-Math.PI/2;
 // ---- Brazil detailed patch (look 3) ----
 const sh=await (await fetch(P+'shape.json')).json();const [x0,x1,y0,y1]=sh.bbox;
-const L=new THREE.TextureLoader(),tx=n=>{const t=L.load(P+n);t.anisotropy=8;return t};
-const map=tx('c3.jpg');map.colorSpace=THREE.SRGBColorSpace;const mask=tx('mask.png'),hgt=tx('height.png');
+const L=new THREE.TextureLoader();
+function laterTex(url,opt){const t=new THREE.Texture();if(opt&&opt.srgb)t.colorSpace=THREE.SRGBColorSpace;if(opt&&opt.near){t.minFilter=t.magFilter=THREE.NearestFilter;t.generateMipmaps=false;}else t.anisotropy=8;
+ setTimeout(()=>L.load(url,done=>{t.image=done.image;t.needsUpdate=true;}),1600);return t;}
+const map=laterTex(P+'c3.jpg',{srgb:true}),mask=laterTex(P+'mask.png'),hgt=laterTex(P+'height.png');
 const PU={...U,map:{value:map},mask:{value:mask},hgt:{value:hgt},bb:{value:new THREE.Vector4(x0,y0,x1,y1)},vex:{value:.03},lift:{value:.004},rv:{value:0},
  cut:{value:[0,1,2,3].map(()=>new THREE.Vector4())},con:{value:[0,0,0,0]},ct:{value:[0,1,2,3].map(()=>null)},cb:{value:[0,1,2,3].map(()=>new THREE.Vector4(0,0,1,1))},cw:{value:[0,0,0,0]},
  flatA:{value:0},flatC:{value:new THREE.Vector3()},win:{value:new THREE.Vector4()},winOn:{value:0}};
@@ -137,9 +144,8 @@ const brazil=new THREE.Mesh(new THREE.PlaneGeometry(1,1,260,260),bmat);brazil.fr
 
 // ---- rest of South America: one continent-wide look-3 patch, countries switched on by id (hair-thin shared borders) ----
 const SAP='previews/south-america/';const SAN=await (await fetch(SAP+'ids.json')).json();
-const ltx=(n,near)=>{const t=new THREE.TextureLoader().load(SAP+n);if(near){t.minFilter=t.magFilter=THREE.NearestFilter;t.generateMipmaps=false}else t.anisotropy=8;return t};
-const smap=ltx('c3.jpg');smap.colorSpace=THREE.SRGBColorSpace;
-const SU={sun:U.sun,map:{value:smap},hgt:{value:ltx('height.png')},ids:{value:ltx('ids.png',true)},bb:{value:new THREE.Vector4(-82,-56,-34,13)},vex:PU.vex,lift:PU.lift,
+const smap=laterTex(SAP+'c3.jpg',{srgb:true});
+const SU={sun:U.sun,map:{value:smap},hgt:{value:laterTex(SAP+'height.png')},ids:{value:laterTex(SAP+'ids.png',{near:true})},bb:{value:new THREE.Vector4(-82,-56,-34,13)},vex:PU.vex,lift:PU.lift,
  on:{value:new Array(16).fill(0)},rid:{value:-1},rc:{value:new THREE.Vector3()},rr:{value:0},px:{value:new THREE.Vector2(1/1325,1/2048)},win:PU.win,winOn:PU.winOn};
 const smat=new THREE.ShaderMaterial({uniforms:SU,
 vertexShader:`uniform float vex,lift;uniform vec4 bb;uniform sampler2D hgt;varying vec2 vu;varying vec3 wn,s;
@@ -179,7 +185,7 @@ const landX=landC.getContext('2d');const landTex=new THREE.CanvasTexture(landC);
 landTex.colorSpace=THREE.LinearSRGBColorSpace;landTex.generateMipmaps=false;landTex.minFilter=landTex.magFilter=THREE.LinearFilter;landTex.wrapS=THREE.RepeatWrapping;
 const placedFeats=[];
 function paintLand(f){if(!f||!f.geometry)return;placedFeats.push(f);const gp=d3.geoPath(eq(MASK_W,MASK_H),landX);landX.beginPath();gp(f);landX.fillStyle='#fff';landX.fill();landX.lineWidth=3;landX.strokeStyle='#fff';landX.stroke();landTex.needsUpdate=true;}
-function clearLand(){placedFeats.length=0;landX.clearRect(0,0,MASK_W,MASK_H);landTex.needsUpdate=true;}
+function clearLand(){placedFeats.length=0;if(landX){landX.clearRect(0,0,MASK_W,MASK_H);landTex.needsUpdate=true;}}
 function coversLL(lon,lat){const p=[lon,lat];for(const f of placedFeats){try{if(d3.geoContains(f,p))return true;}catch(e){}}return false;}
 const detail=attachSADetail(THREE,{G,C,O,PU,SU,U,SAN,isBrazil:()=>brPlaced,flags:saFlags,tiles:saTiles,land:landTex,covers:coversLL});
 // ---- city streaming (LOD + activity gating) ----
@@ -279,12 +285,13 @@ function amClear(){for(const M of AM.values()){M.on=false;M.mesh.visible=false;}
 let hdClose=false;function hdRegion(){return true;}
 function markHd(f){if(f)hdClose=true;}
 const TILE='https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/';
-const TILE_N=9,TILE_PX=TILE_N*256;
-const tileCache=new Map();const tileCanvas=document.createElement('canvas');tileCanvas.width=tileCanvas.height=TILE_PX;
-const tileTex=new THREE.CanvasTexture(tileCanvas);tileTex.colorSpace=THREE.SRGBColorSpace;tileTex.anisotropy=8;tileTex.generateMipmaps=false;tileTex.minFilter=THREE.LinearFilter;tileTex.magFilter=THREE.LinearFilter;
-const tileMat=new THREE.MeshBasicMaterial({map:tileTex,depthTest:false,depthWrite:false,toneMapped:false,transparent:true,side:THREE.DoubleSide});
-const tileMesh=new THREE.Mesh(new THREE.BufferGeometry(),tileMat);tileMesh.frustumCulled=false;tileMesh.renderOrder=4;tileMesh.visible=false;G.add(tileMesh);
-let tileKey='',tileStamp=0;
+const TILE_N=8,TILE_PX=TILE_N*256;
+const tileCache=new Map();
+let tileCanvas=null,tileTex=null,tileMesh=null,tileKey='',tileStamp=0,tileNext=0;
+function ensureTiles(){if(tileMesh)return;tileCanvas=document.createElement('canvas');tileCanvas.width=tileCanvas.height=TILE_PX;
+ tileTex=new THREE.CanvasTexture(tileCanvas);tileTex.colorSpace=THREE.SRGBColorSpace;tileTex.anisotropy=4;tileTex.generateMipmaps=false;tileTex.minFilter=THREE.LinearFilter;tileTex.magFilter=THREE.LinearFilter;
+ const mat=new THREE.MeshBasicMaterial({map:tileTex,depthTest:false,depthWrite:false,toneMapped:false,transparent:true,side:THREE.DoubleSide});
+ tileMesh=new THREE.Mesh(new THREE.BufferGeometry(),mat);tileMesh.frustumCulled=false;tileMesh.renderOrder=4;tileMesh.visible=false;G.add(tileMesh);}
 function merc(lon,lat,z){const n=2**z;const x=(lon+180)/360*n;const lr=Math.max(-1.48,Math.min(1.48,lat*Math.PI/180));const y=(1-Math.log(Math.tan(lr)+1/Math.cos(lr))/Math.PI)/2*n;return {x,y,n};}
 function unmerc(x,y,z){const n=2**z;const lon=x/n*360-180;const t=Math.PI*(1-2*y/n);const lat=Math.atan(Math.sinh(t))*180/Math.PI;return [lon,lat];}
 function sphereHit(nx,ny){const v=new THREE.Vector3(nx,ny,.5).unproject(C);const o=C.position.clone(),d=v.sub(o).normalize();
@@ -314,14 +321,13 @@ function tileShape(b){const N=32,pos=[],uv=[],idx=[];
  tileMesh.geometry.dispose();const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);tileMesh.geometry=g;}
 let tileBox=null;
 const TILE_R=1.5015;
-function tileUpdate(alt){if(!hdClose||alt>.22){tileMesh.visible=false;return;}const hit=sphereHit(0,0);if(!hit){tileMesh.visible=false;return;}
- const deg=viewDeg(),z=tileZ(deg),key=z+':'+Math.round(hit.lon*4)+':'+Math.round(hit.lat*4);
- if(key!==tileKey||tileStamp){const prev=tileStamp;tileStamp=0;tileBox=tilePaint(hit.lon,hit.lat,z);if(tileBox.ready){tileShape(tileBox);tileKey=key;}else tileStamp=prev?prev:1;}
+function tileUpdate(alt){if(!hdClose||alt>.09){if(tileMesh)tileMesh.visible=false;return;}ensureTiles();const hit=sphereHit(0,0);if(!hit){tileMesh.visible=false;return;}
+ const deg=viewDeg(),z=tileZ(deg),key=z+':'+Math.round(hit.lon*2)+':'+Math.round(hit.lat*2);
+ const now=performance.now();if((key!==tileKey||tileStamp)&&now>=tileNext){tileNext=now+180;const prev=tileStamp;tileStamp=0;tileBox=tilePaint(hit.lon,hit.lat,z);if(tileBox.ready){tileShape(tileBox);tileKey=key;}else tileStamp=prev?prev:1;}
  const show=!!(tileBox&&tileBox.ready>=Math.min(4,TILE_N));
  tileMesh.visible=show;if(show)tileMesh.scale.setScalar(TILE_R);
  if(tileBox){saTiles.tex=tileTex;saTiles.box=tileBox;saTiles.ready=tileBox.ready>=Math.min(4,TILE_N);} }
-saTiles.grab=()=>{if(!tileBox||tileBox.ready<8)return null;const ctx=tileCanvas.getContext('2d',{willReadFrequently:true});
- return {box:{lon0:tileBox.lon0,lat0:tileBox.lat0,lon1:tileBox.lon1,lat1:tileBox.lat1},data:ctx.getImageData(0,0,TILE_PX,TILE_PX).data,w:TILE_PX,h:TILE_PX};};
+saTiles.grab=()=>null;
 saTiles.stamp=()=>tileBox&&tileBox.ready>=8?(Math.round(tileBox.lon0*5)+','+Math.round(tileBox.lat0*5)+':1'):'0';
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  markHd(f,cont);paintLand(f);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
@@ -362,8 +368,7 @@ addEventListener('pointermove',e=>{if(!grab||e.pointerId!==grab.id)return;const 
  UPV.copy(C.up).normalize();RT.setFromMatrixColumn(C.matrixWorld,0);GQ.setFromAxisAngle(UPV,dx*k);G.quaternion.premultiply(GQ);GQ.setFromAxisAngle(RT,dy*k);G.quaternion.premultiply(GQ);});
 const endGrab=e=>{if(grab&&e.pointerId===grab.id){grab=null;O.enabled=true}};addEventListener('pointerup',endGrab);addEventListener('pointercancel',endGrab);
 addEventListener('resize',resize);resize();
-R.setAnimationLoop(now=>{U.t.value=now/1000;anims=anims.filter(a=>!a(now));if(LU.pm.value>.5){if(heldTarget)LU.pa.value=.62+.34*Math.sin(now/180);else if(now<pulseEnd)LU.pa.value=.35+.35*Math.sin(now/150);else{LU.pm.value=0;LU.pa.value=0;paintMark(null);}}
- O.update();lod();if(skyNear.visible)sunBoard.lookAt(C.position);labels();R.render(S,C);});
+viewLive=true;
 function setBg(i){U.bg.value=i;skyNear.visible=i<0.5;}
 const KMv=KM;function zoomRio(alt){const c=CS[0];const n=c.up.clone().applyQuaternion(G.quaternion);const T=n.clone().multiplyScalar(1.5+PU.lift.value);if(alt>=.06){O.target.set(0,0,0);C.position.copy(n.multiplyScalar(1.5+alt));C.lookAt(0,0,0);return}
  O.target.copy(T);O.minDistance=.00012;O.maxPolarAngle=1.38;C.up.copy(n);const s=new THREE.Vector3(0,-1,0).projectOnPlane(n).normalize();C.position.copy(T).addScaledVector(n,alt).addScaledVector(s,alt*.6);C.lookAt(T);O.update();}

@@ -1062,6 +1062,12 @@ export function attachSADetail(THREE, api) {
   }
 
   function update(alt) {
+    if (alt > 0.12) {
+      PU.vex.value = 0.03;
+      if (group || pendingKey) unload();
+      mixAudio(0, null);
+      return 0;
+    }
     const ll = viewLL();
     if (ll && inBox(ll) && anyOn() && alt < 0.11) ensureMaps();
     const w = reliefAt(alt);
