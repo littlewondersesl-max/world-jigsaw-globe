@@ -8,7 +8,7 @@ const BRP = 'previews/brazil/';
 const SA = { lon0: -82, lon1: -34, lat0: -56, lat1: 13 };
 const BR = { lon0: -74.5, lon1: -34, lat0: -34.5, lat1: 5.8 };
 const DEG = 1.5 * Math.PI / 180;
-const VEX0 = 0.024, LIFT0 = 0.00002;
+const VEX0 = 0.011, LIFT0 = 0.00002;
 // Capital + the main cities. tier "show" is the denser miniature used for the largest cities.
 // Rio also keeps the hand-built model, which takes over only when you are very close.
 const CITIES = [
@@ -108,21 +108,50 @@ function uvOf(box, lon, lat) {
   return [(lon - box.lon0) / (box.lon1 - box.lon0), (box.lat1 - lat) / (box.lat1 - box.lat0)];
 }
 
+function mergeParts(parts) {
+  const pos = [], nrm = [], idx = [];
+  let base = 0;
+  for (const g of parts) {
+    const p = g.attributes.position, nr = g.attributes.normal, id = g.index;
+    for (let v = 0; v < p.count; v++) {
+      pos.push(p.getX(v), p.getY(v), p.getZ(v));
+      nrm.push(nr.getX(v), nr.getY(v), nr.getZ(v));
+    }
+    if (id) for (let k = 0; k < id.count; k++) idx.push(id.getX(k) + base);
+    base += p.count;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setIndex(idx);
+  return geo;
+}
+function treeParts() {
+  const trunk = new THREE.CylinderGeometry(0.18, 0.26, 0.55, 6);
+  trunk.translate(0, 0.28, 0);
+  const low = new THREE.ConeGeometry(0.72, 0.85, 8);
+  low.translate(0, 0.78, 0);
+  const high = new THREE.ConeGeometry(0.46, 0.62, 7);
+  high.translate(0, 1.22, 0);
+  return { trunk, canopy: mergeParts([low, high]) };
+}
+
 export function attachSADetail(THREE, api) {
-  const { G, C, O, PU, SU, U, SAN, isBrazil, flags } = api;
+  const { G, C, O, PU, SU, U, SAN, isBrazil, flags, tiles } = api;
   const win = PU.win, winOn = PU.winOn;
   let maps = null, loading = false, group = null, token = 0, builtKey = '', pendingKey = '';
   let natureOn = true, muted = false, audio = null, birdAt = 0;
+  const treesGeo = treeParts();
   const geos = {
-    tree: new THREE.IcosahedronGeometry(1, 0),
+    trunk: treesGeo.trunk,
+    canopy: treesGeo.canopy,
     box: new THREE.BoxGeometry(1, 1, 1),
-    roof: new THREE.ConeGeometry(0.62, 0.42, 4),
+    roof: new THREE.ConeGeometry(0.72, 0.55, 4),
     road: new THREE.PlaneGeometry(1, 1),
     fig: new THREE.BoxGeometry(1, 1, 1)
   };
-  geos.tree.scale(1, 1.25, 1); geos.tree.translate(0, 0.85, 0);
   geos.box.translate(0, 0.5, 0);
-  geos.roof.rotateY(Math.PI / 4); geos.roof.translate(0, 0.21, 0);
+  geos.roof.rotateY(Math.PI / 4); geos.roof.translate(0, 0.28, 0);
   geos.road.rotateX(-Math.PI / 2);
   geos.fig.translate(0, 0.5, 0);
   const col = new THREE.Color(), M = new THREE.Matrix4(), Q = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
@@ -134,40 +163,41 @@ export function attachSADetail(THREE, api) {
     u.t = { value: 0 };
     return u;
   }
-  function bindRad(mat, sway) {
-    mat.onBeforeCompile = s => {
-      s.uniforms.vex = mat.userData.u.vex;
-      s.uniforms.vex0 = mat.userData.u.vex0;
-      s.uniforms.lift = mat.userData.u.lift;
-      s.uniforms.lift0 = mat.userData.u.lift0;
-      s.uniforms.t = mat.userData.u.t;
-      s.vertexShader = RAD_VS + '\n' + (sway ? 'uniform float t;\n' : '') + s.vertexShader.replace('#include <project_vertex>',
-        `vec4 mvPosition;
-#ifdef USE_INSTANCING
-  ${sway ? `float ph=instanceMatrix[3].x*37.0+instanceMatrix[3].z*23.0;
-  transformed.x+=sin(t*1.7+ph)*0.07*position.y;
-  transformed.z+=cos(t*1.3+ph)*0.05*position.y;` : ''}
-  mvPosition=vec4(saInst(transformed, instanceMatrix), 1.0);
-#else
-  mvPosition=vec4(transformed, 1.0);
-#endif
-mvPosition=modelViewMatrix*mvPosition;
-gl_Position=projectionMatrix*mvPosition;`);
-    };
-    return mat;
+  // Painted miniature: albedo stays the colour we set. A face that points up is a little brighter, but nothing goes black.
+  function paintMat(sway) {
+    const u = radUniforms();
+    const m = new THREE.ShaderMaterial({
+      uniforms: u,
+      vertexShader: RAD_VS + `
+        uniform float t;
+        varying vec3 vCol; varying float vUp;
+        void main(){
+          vec3 p = position;
+          ${sway ? `float ph=instanceMatrix[3].x*37.0+instanceMatrix[3].z*23.0;
+          p.x += sin(t*1.55+ph)*0.055*max(position.y,0.0);
+          p.z += cos(t*1.25+ph)*0.04*max(position.y,0.0);` : ''}
+          vUp = abs(normalize(normal).y);
+          vCol = instanceColor;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(saInst(p, instanceMatrix), 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vCol; varying float vUp;
+        void main(){
+          vec3 col = vCol * (0.86 + 0.28 * vUp);
+          gl_FragColor = vec4(col, 1.0);
+        }`
+    });
+    m.userData.u = u;
+    return m;
   }
   const mats = {};
-  function std(color, rough, sway) {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 });
-    m.userData.u = radUniforms();
-    return bindRad(m, sway);
-  }
-  mats.tree = std(0xffffff, 0.9, true);
-  mats.build = std(0xa8a49c, 0.85, false);
-  mats.roof = std(0xffffff, 0.8, false);
-  mats.road = std(0x5c564e, 0.95, false);
+  mats.canopy = paintMat(true);
+  mats.trunk = paintMat(false);
+  mats.build = paintMat(false);
+  mats.roof = paintMat(false);
+  mats.road = paintMat(false);
   mats.road.polygonOffset = true; mats.road.polygonOffsetFactor = -2;
-  mats.fig = std(0xffffff, 0.7, false);
+  mats.fig = paintMat(false);
   function shaderMat(frag, extra) {
     const u = radUniforms();
     if (extra) Object.assign(u, extra);
@@ -187,19 +217,32 @@ gl_Position=projectionMatrix*mvPosition;`);
     m.userData.u = u;
     return m;
   }
+  mats.bank = shaderMat(`
+    varying vec2 vUv;
+    void main(){
+      float e = abs(vUv.y * 2.0 - 1.0);
+      vec3 earth = vec3(0.42, 0.34, 0.18);
+      vec3 grass = vec3(0.28, 0.40, 0.16);
+      vec3 col = mix(grass, earth, smoothstep(0.25, 0.85, e));
+      gl_FragColor = vec4(col, 1.0);
+    }`);
+  mats.bank.transparent = false; mats.bank.depthWrite = true;
   mats.river = shaderMat(`
     uniform float t; varying vec2 vUv; varying vec3 vW;
     float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
     float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1.,0.)),f.x),mix(h(i+vec2(0.,1.)),h(i+1.),f.x),f.y);}
     void main(){
-      vec2 q=vec2(vUv.x-t*1.15, vUv.y*3.0);
-      float r=n(q*vec2(1.,2.))*0.6+n(q*vec2(3.,5.)+7.)*0.4;
-      float edge=1.-pow(abs(vUv.y*2.-1.),3.);
+      vec2 q=vec2(vUv.x*1.4-t*1.3, vUv.y*5.0);
+      float r=n(q*vec2(1.2,2.4))*0.65+n(q*vec2(3.1,6.0)+4.0)*0.35;
+      float edge=smoothstep(0.0,0.18,vUv.y)*smoothstep(1.0,0.82,vUv.y);
       vec3 V=normalize(cameraPosition-vW);
-      float fr=pow(1.-max(normalize(vW).y*0.15+0.85*max(V.y,0.),0.),3.);
-      vec3 col=mix(vec3(0.10,0.28,0.36), vec3(0.55,0.72,0.78), fr*0.65+0.12);
-      col+=smoothstep(0.72,0.92,r)*vec3(1.,0.96,0.88)*0.16;
-      gl_FragColor=vec4(pow(col,vec3(1./2.2)), 0.82*edge);
+      vec3 N=normalize(vW);
+      float fres=pow(1.0-max(dot(N,V),0.0), 3.0);
+      vec3 deep=vec3(0.02,0.14,0.20), mid=vec3(0.05,0.30,0.36);
+      vec3 col=mix(deep, mid, r);
+      col += smoothstep(0.72,0.95,r)*vec3(0.55,0.7,0.78)*0.28;
+      col += fres*vec3(0.35,0.5,0.58)*0.22;
+      gl_FragColor=vec4(pow(col,vec3(1./2.2)), 0.94*edge);
     }`);
   mats.lake = shaderMat(`
     uniform float t; varying vec2 vUv; varying vec3 vW;
@@ -228,28 +271,29 @@ gl_Position=projectionMatrix*mvPosition;`);
     ...radUniforms(),
     mapS: { value: SU.map.value }, mapB: { value: PU.map.value }, ids: { value: SU.ids.value },
     bbS: { value: SU.bb.value }, bbB: { value: PU.bb.value },
-    on: SU.on, br: { value: 0 }, sun: U.sun, rioOn: { value: 0 }, rioLL: { value: new THREE.Vector2(-43.2, -22.91) }
+    on: SU.on, br: { value: 0 }, sun: U.sun,
+    sat: { value: SU.map.value }, satOn: { value: 0 }, satBox: { value: new THREE.Vector4() },
+    rioOn: { value: 0 }, rioB: { value: new THREE.Vector4() }
   };
   mats.patch = new THREE.ShaderMaterial({
     uniforms: patchU,
     vertexShader: RAD_VS + `
       attribute vec2 ll;
-      varying vec3 wn; varying vec2 vLL;
+      varying vec3 vWp; varying vec2 vLL;
       void main(){
         vLL=ll;
         vec3 dir=normalize(position);
         float r=length(position)+(lift-lift0)+hh*(vex-vex0);
         vec3 wp=dir*r;
-        wn=normalize(mat3(modelMatrix)*dir);
+        vWp=(modelMatrix*vec4(wp,1.0)).xyz;
         gl_Position=projectionMatrix*modelViewMatrix*vec4(wp,1.0);
       }`,
     fragmentShader: `
-      uniform sampler2D mapS, mapB, ids;
-      uniform vec4 bbS, bbB;
-      uniform float on[16], br, rioOn;
-      uniform vec2 rioLL;
+      uniform sampler2D mapS, mapB, ids, sat;
+      uniform vec4 bbS, bbB, satBox, rioB;
+      uniform float on[16], br, rioOn, satOn;
       uniform vec3 sun;
-      varying vec3 wn; varying vec2 vLL;
+      varying vec3 vWp; varying vec2 vLL;
       void main(){
         vec2 uvS=vec2((vLL.x-bbS.x)/(bbS.z-bbS.x),(vLL.y-bbS.y)/(bbS.w-bbS.y));
         float id=texture2D(ids, clamp(uvS,0.001,0.999)).r*255.0;
@@ -257,16 +301,21 @@ gl_Position=projectionMatrix*mvPosition;`);
         if(k==0) discard;
         if(k==3){ if(br<0.5) discard; }
         else if(on[k]<0.5) discard;
-        if(rioOn>0.5){vec2 rd=vec2((vLL.x-rioLL.x)*cos(radians(vLL.y)), vLL.y-rioLL.y); if(length(rd)<0.30) discard;}
-        vec2 uvB=vec2((vLL.x-bbB.x)/(bbB.z-bbB.x),(vLL.y-bbB.y)/(bbB.w-bbB.y));
-        vec3 raw=k==3?texture2D(mapB, clamp(uvB,0.001,0.999)).rgb:texture2D(mapS, clamp(uvS,0.001,0.999)).rgb;
+        if(rioOn>0.45 && vLL.x>rioB.x && vLL.x<rioB.z && vLL.y>rioB.y && vLL.y<rioB.w) discard;
+        vec2 tuv=vec2((vLL.x-satBox.x)/(satBox.z-satBox.x),(vLL.y-satBox.y)/(satBox.w-satBox.y));
+        vec3 raw;
+        if(satOn>0.5 && tuv.x>0.0 && tuv.x<1.0 && tuv.y>0.0 && tuv.y<1.0) raw=texture2D(sat, tuv).rgb;
+        else {
+          vec2 uvB=vec2((vLL.x-bbB.x)/(bbB.z-bbB.x),(vLL.y-bbB.y)/(bbB.w-bbB.y));
+          raw=k==3?texture2D(mapB, clamp(uvB,0.001,0.999)).rgb:texture2D(mapS, clamp(uvS,0.001,0.999)).rgb;
+        }
         vec3 mp=pow(raw, vec3(2.2));
-        float l=dot(mp, vec3(0.30,0.42,0.28));
-        mp=mix(vec3(l), mp, 1.08);
-        float grit=fract(sin(dot(floor(vLL*90.0), vec2(12.9,78.2)))*43758.5);
-        mp*=1.0+(grit-0.5)*0.07;
-        float nd=dot(normalize(wn), sun);
-        vec3 col=mp*(0.22+1.0*smoothstep(-0.1,0.35,nd));
+        float l=dot(mp, vec3(0.28,0.40,0.26));
+        mp=mix(vec3(l), mp, 1.15);
+        vec3 n=normalize(cross(dFdx(vWp), dFdy(vWp)));
+        float nd=dot(n, normalize(sun));
+        float hill=0.74+0.36*smoothstep(-0.25,0.8,nd);
+        vec3 col=mp*hill;
         gl_FragColor=vec4(pow(col, vec3(1.0/2.2)), 1.0);
       }`
   });
@@ -274,7 +323,7 @@ gl_Position=projectionMatrix*mvPosition;`);
   mats.patch.side = THREE.DoubleSide;
   mats.patch.polygonOffset = true; mats.patch.polygonOffsetFactor = -1;
 
-  const live = [mats.tree, mats.build, mats.roof, mats.road, mats.fig, mats.river, mats.lake, mats.foam, mats.patch];
+  const live = [mats.canopy, mats.trunk, mats.build, mats.roof, mats.road, mats.fig, mats.bank, mats.river, mats.lake, mats.foam, mats.patch];
 
   function countryName(id) {
     const n = SAN[id - 1] || '';
@@ -419,7 +468,7 @@ gl_Position=projectionMatrix*mvPosition;`);
     const fov = C.fov * Math.PI / 180;
     const width = 2 * Math.tan(fov * 0.5) * Math.max(alt, 0.003);
     const deg = width / DEG;
-    return Math.min(6.2, Math.max(2.05, deg * 1.55));
+    return Math.min(1.5, Math.max(0.32, deg * 0.72));
   }
   function overPlaced(ll) {
     if (!maps || !ll) return false;
@@ -460,7 +509,7 @@ gl_Position=projectionMatrix*mvPosition;`);
     if (!g) return;
     G.remove(g);
     g.traverse(o => {
-      if (o.geometry && o.geometry !== geos.tree && o.geometry !== geos.box && o.geometry !== geos.roof && o.geometry !== geos.road && o.geometry !== geos.fig) o.geometry.dispose();
+      if (o.geometry && o.geometry !== geos.trunk && o.geometry !== geos.canopy && o.geometry !== geos.box && o.geometry !== geos.roof && o.geometry !== geos.road && o.geometry !== geos.fig) o.geometry.dispose();
     });
   }
 
@@ -500,7 +549,7 @@ gl_Position=projectionMatrix*mvPosition;`);
     }
     cities.sort((a, b) => Math.hypot(a.lon - ll.lon, a.lat - ll.lat) - Math.hypot(b.lon - ll.lon, b.lat - ll.lat));
     // ground patch
-    const N = 112;
+    const N = 168;
     const pos = [], uv = [], hhA = [], llA = [], idx = [];
     for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) {
       const lon = ll.lon + (i / N - 0.5) * 2 * half, lat = ll.lat + (j / N - 0.5) * 2 * half;
@@ -524,48 +573,71 @@ gl_Position=projectionMatrix*mvPosition;`);
     patch.frustumCulled = false; patch.renderOrder = 3;
     root.add(patch);
 
-    // trees
-    const TREES = 6800;
-    const trees = addInst(geos.tree, mats.tree, TREES);
-    let ti = 0, guard = 0;
-    while (ti < TREES && guard < TREES * 7) {
-      guard++;
-      const lon = ll.lon + (rnd() - 0.5) * 2 * half, lat = ll.lat + (rnd() - 0.5) * 2 * half;
-      const id = idAt(lon, lat);
-      if (!isOn(id) || waterAt(lon, lat) > 0.32) continue;
-      const [m, ins] = maskInset(lon, lat, id);
-      if (m < 0.45 || ins < 0.28) continue;
-      const h = height01(lon, lat);
-      const f = forestAt(lon, lat, h);
-      if (rnd() > f * f) continue;
-      if (slope(lon, lat) > 0.55) continue;
-      let inCity = false;
-      for (const c of cities) if (Math.hypot(lon - c.lon, (lat - c.lat) * 1.05) < c.rad * 0.92) { inCity = true; break; }
-      if (inCity) continue;
-      if (rioCover && Math.hypot(lon + 43.2, lat + 22.9) < 0.34) continue;
-      const o = basis(lon, lat, 0.00005);
-      const sc = (0.00011 + rnd() * 0.00016) * (f > 0.55 && h < 0.35 ? 1.25 : 0.85);
-      compose(o.p, rnd() * 6.28, sc, sc * (0.75 + rnd() * 0.55), sc);
-      trees.setMatrixAt(ti, M);
-      if (h > 0.45) col.setHSL(0.18 + rnd() * 0.06, 0.22 + rnd() * 0.12, 0.16 + rnd() * 0.06);
-      else if (lat > -12 && lon < -52 && h < 0.28) col.setHSL(0.28 + rnd() * 0.05, 0.42 + rnd() * 0.2, 0.10 + rnd() * 0.05);
-      else col.setHSL(0.24 + rnd() * 0.07, 0.32 + rnd() * 0.16, 0.13 + rnd() * 0.07);
-      trees.setColorAt(ti, col);
-      trees.userData.hh[ti] = o.hh;
-      ti++;
+    // trees — a trunk plus two canopy cones, packed so a real forest reads as continuous cover
+    const TREES = 14000;
+    const canopies = addInst(geos.canopy, mats.canopy, TREES);
+    const trunks = addInst(geos.trunk, mats.trunk, TREES);
+    let ti = 0;
+    const step = Math.max(0.014, (2 * half) / 96);
+    for (let lat = ll.lat - half; lat <= ll.lat + half && ti < TREES; lat += step) {
+      for (let lon = ll.lon - half; lon <= ll.lon + half && ti < TREES; lon += step) {
+        const jlon = lon + (rnd() - 0.5) * step * 0.65, jlat = lat + (rnd() - 0.5) * step * 0.65;
+        const id = idAt(jlon, jlat);
+        if (!isOn(id) || waterAt(jlon, jlat) > 0.28) continue;
+        const [m, ins] = maskInset(jlon, jlat, id);
+        if (m < 0.45 || ins < 0.22) continue;
+        const h = height01(jlon, jlat);
+        const f = forestAt(jlon, jlat, h);
+        if (h > 0.62 || f < 0.48) continue;
+        if (slope(jlon, jlat) > 0.62) continue;
+        let inCity = false;
+        for (const c of cities) if (Math.hypot(jlon - c.lon, (jlat - c.lat) * 1.05) < c.rad * 0.9) { inCity = true; break; }
+        if (inCity) continue;
+        if (rioCover && Math.hypot(jlon + 43.2, jlat + 22.9) < 0.36) continue;
+        const o = basis(jlon, jlat, 0.00006);
+        const sc = (0.00042 + rnd() * 0.00022) * (f > 0.55 ? 1.15 : 0.8) * (h > 0.5 ? 0.72 : 1);
+        const yaw = rnd() * 6.28;
+        compose(o.p, yaw, sc, sc * (0.85 + rnd() * 0.45), sc);
+        canopies.setMatrixAt(ti, M);
+        if (h > 0.5) col.setRGB(0.28 + rnd() * 0.08, 0.40 + rnd() * 0.08, 0.16);
+        else if (lat > -12 && lon < -50 && h < 0.3) col.setRGB(0.10 + rnd() * 0.06, 0.40 + rnd() * 0.14, 0.08 + rnd() * 0.04);
+        else col.setRGB(0.14 + rnd() * 0.08, 0.42 + rnd() * 0.12, 0.10 + rnd() * 0.05);
+        canopies.setColorAt(ti, col);
+        canopies.userData.hh[ti] = o.hh;
+        compose(o.p, yaw, sc, sc, sc);
+        trunks.setMatrixAt(ti, M);
+        col.setRGB(0.38 + rnd() * 0.08, 0.24 + rnd() * 0.04, 0.10);
+        trunks.setColorAt(ti, col);
+        trunks.userData.hh[ti] = o.hh;
+        ti++;
+        if (f > 0.62 && ti < TREES && rnd() < 0.85) {
+          const o2 = basis(jlon + (rnd() - 0.5) * step * 0.45, jlat + (rnd() - 0.5) * step * 0.45, 0.00006);
+          const sc2 = sc * (0.65 + rnd() * 0.35);
+          compose(o2.p, rnd() * 6, sc2, sc2 * (0.8 + rnd() * 0.4), sc2);
+          canopies.setMatrixAt(ti, M);
+          col.setRGB(0.12 + rnd() * 0.1, 0.36 + rnd() * 0.16, 0.08);
+          canopies.setColorAt(ti, col); canopies.userData.hh[ti] = o2.hh;
+          compose(o2.p, 0, sc2, sc2, sc2);
+          trunks.setMatrixAt(ti, M);
+          col.setRGB(0.36, 0.22, 0.09);
+          trunks.setColorAt(ti, col); trunks.userData.hh[ti] = o2.hh;
+          ti++;
+        }
+      }
     }
-    trees.count = ti;
-    const treeMesh = finishInst(trees);
-    if (treeMesh) { treeMesh.renderOrder = 5; root.add(treeMesh); }
-    else trees.geometry.dispose();
+    canopies.count = ti; trunks.count = ti;
+    const canopyMesh = finishInst(canopies);
+    const trunkMesh = finishInst(trunks);
+    if (canopyMesh) { canopyMesh.renderOrder = 5; root.add(canopyMesh); } else canopies.geometry.dispose();
+    if (trunkMesh) { trunkMesh.renderOrder = 5; root.add(trunkMesh); } else trunks.geometry.dispose();
 
     // cities
     let bN = 0, rN = 0, fN = 0, pN = 0;
     for (const c of cities) {
-      const n = c.tier === 'show' ? 20 : 10;
+      const n = c.tier === 'show' ? 22 : 12;
       bN += n * n * 4; rN += n * n * 2; fN += n * n; pN += c.tier === 'show' ? 80 : 16;
     }
-    bN = Math.min(7000, bN); rN = Math.min(6000, rN); fN = Math.min(2800, fN); pN = Math.min(420, pN);
+    bN = Math.min(9000, bN); rN = Math.min(8000, rN); fN = Math.min(5000, fN); pN = Math.min(420, pN);
     const B = addInst(geos.box, mats.build, bN || 1);
     const RD = addInst(geos.road, mats.road, rN || 1);
     const RF = addInst(geos.roof, mats.roof, fN || 1);
@@ -573,7 +645,8 @@ gl_Position=projectionMatrix*mvPosition;`);
     let bi = 0, ri = 0, fi = 0, pi = 0;
     const gDeg = DEG;
     for (const c of cities) {
-      const n = c.tier === 'show' ? 20 : 10;
+      if (c.name === 'Rio de Janeiro') continue;
+      const n = c.tier === 'show' ? 22 : 12;
       const g = c.rad / n;
       const ca = Math.cos(c.ang), sa = Math.sin(c.ang);
       const P2 = (i, j) => [c.lon + (i * ca - j * sa) * g, c.lat + (i * sa + j * ca) * g];
@@ -589,10 +662,13 @@ gl_Position=projectionMatrix*mvPosition;`);
           const [m, ins] = maskInset(lon, lat, id);
           if (m < 0.5 || ins < 0.35 || slope(lon, lat) > 0.48) continue;
           const o = basis(lon, lat, 0.00016);
-          const main = (rot ? i : j) % 4 === 0;
-          const len = g * gDeg * 1.02, wid = (main ? 0.00022 : 0.00012) * (c.tier === 'show' ? 1.15 : 0.85);
+          const main = (rot ? i : j) % 5 === 0;
+          const len = g * gDeg * 1.05, wid = g * gDeg * (main ? 0.34 : 0.2);
           compose(o.p, -c.ang - (rot ? Math.PI / 2 : 0), len, 1, wid);
-          RD.setMatrixAt(ri, M); RD.userData.hh[ri] = o.hh; ri++;
+          RD.setMatrixAt(ri, M);
+          col.setRGB(main ? 0.62 : 0.55, main ? 0.56 : 0.5, main ? 0.46 : 0.4);
+          RD.setColorAt(ri, col);
+          RD.userData.hh[ri] = o.hh; ri++;
         }
         if (c.tier === 'show' && rr < g * 0.85) {
           if (pi < pN && rnd() < 0.8) {
@@ -619,20 +695,25 @@ gl_Position=projectionMatrix*mvPosition;`);
           if (sl > 0.5) continue;
           const o = basis(lon, lat, 0.00004);
           const cell = g * gDeg;
-          const tall = c.tier === 'show' && c.pop >= 2 && near > 0.42 && rnd() < Math.pow(near, 1.6) * 0.55 && sl < 0.18;
-          const hg = tall ? cell * (0.7 + Math.pow(near, 2) * 1.5 * (0.45 + rnd())) : cell * (0.16 + rnd() * 0.28) * (sl > 0.22 ? 0.65 : 1);
-          const wd = cell * (0.22 + rnd() * 0.16), dp = cell * (0.20 + rnd() * 0.16);
-          compose(o.p, -c.ang + (sl > 0.22 ? (rnd() - 0.5) * 0.4 : 0), wd, hg, dp);
+          const tall = c.tier === 'show' && near > 0.55 && rnd() < 0.55 && sl < 0.2;
+          const tower = c.tier === 'show' && near > 0.78 && rnd() < 0.7 && sl < 0.15;
+          const hg = tower ? cell * (2.4 + rnd() * 2.2) : tall ? cell * (1.1 + rnd() * 1.3) : cell * (0.32 + rnd() * 0.38);
+          const wd = cell * (tower ? 0.22 + rnd() * 0.08 : 0.34 + rnd() * 0.16);
+          const dp = cell * (tower ? 0.22 + rnd() * 0.08 : 0.30 + rnd() * 0.14);
+          compose(o.p, -c.ang, wd, hg, dp);
           B.setMatrixAt(bi, M);
-          if (tall) col.setHSL(0.08 + rnd() * 0.04, 0.04 + rnd() * 0.06, 0.42 + rnd() * 0.16);
-          else if (rnd() < 0.45) col.setHSL(0.03 + rnd() * 0.03, 0.38 + rnd() * 0.16, 0.32 + rnd() * 0.1);
-          else col.setHSL(0.08 + rnd() * 0.05, 0.12 + rnd() * 0.1, 0.55 + rnd() * 0.16);
+          if (tower) col.setRGB(0.78 + rnd() * 0.12, 0.82 + rnd() * 0.1, 0.86 + rnd() * 0.08);
+          else if (tall) col.setRGB(0.86 + rnd() * 0.08, 0.84 + rnd() * 0.06, 0.78 + rnd() * 0.06);
+          else if (rnd() < 0.55) col.setRGB(0.94, 0.90, 0.80);
+          else col.setRGB(0.90 + rnd() * 0.06, 0.86 + rnd() * 0.06, 0.76);
           B.setColorAt(bi, col); B.userData.hh[bi] = o.hh; bi++;
-          if (!tall && fi < fN && rnd() < 0.62) {
+          if (!tower && fi < fN && rnd() < 0.86) {
             const top = o.p.clone().addScaledVector(up, hg);
-            compose(top, -c.ang, wd * 1.05, Math.min(wd, dp) * 0.9, dp * 1.05);
+            const rh = Math.min(wd, dp) * (0.55 + rnd() * 0.25);
+            compose(top, -c.ang, wd * 1.08, rh, dp * 1.08);
             RF.setMatrixAt(fi, M);
-            col.setHSL(0.02 + rnd() * 0.03, 0.45 + rnd() * 0.2, 0.28 + rnd() * 0.1);
+            const hue = rnd() < 0.7 ? 0.02 + rnd() * 0.03 : 0.07 + rnd() * 0.04;
+            col.setHSL(hue, 0.62 + rnd() * 0.15, 0.40 + rnd() * 0.08);
             RF.setColorAt(fi, col); RF.userData.hh[fi] = o.hh; fi++;
           }
           if (c.tier === 'show' && pi < pN && near > 0.25 && rnd() < 0.08) {
@@ -659,51 +740,87 @@ gl_Position=projectionMatrix*mvPosition;`);
     // rivers — Natural Earth courses already clipped to the continent (Amazon, Negro, Madeira, Orinoco, Paraná, Paraguay, Uruguay, São Francisco, Magdalena, …)
     if (maps.rivers) {
       const rpos = [], ruv = [], rhh = [], ridx = [];
+      const bpos = [], buv = [], bhh = [], bidx = [];
       for (const rv of maps.rivers) {
+        const raw = rv.p.map(p => [SA.lon0 + p[0] * (SA.lon1 - SA.lon0), SA.lat1 - p[1] * (SA.lat1 - SA.lat0)]);
+        const line = [];
+        for (let i = 0; i < raw.length; i++) {
+          if (!line.length) { line.push(raw[i]); continue; }
+          const a = line[line.length - 1], b = raw[i];
+          const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          const n = Math.min(30, Math.max(1, Math.ceil(dist / 0.018)));
+          for (let k = 1; k <= n; k++) line.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+        }
         const pts = [];
-        for (const p of rv.p) {
-          const lon = SA.lon0 + p[0] * (SA.lon1 - SA.lon0);
-          const lat = SA.lat1 - p[1] * (SA.lat1 - SA.lat0);
-          if (Math.abs(lon - ll.lon) > half + 0.45 || Math.abs(lat - ll.lat) > half + 0.45) { pts.push(null); continue; }
+        for (const [lon, lat] of line) {
+          if (Math.abs(lon - ll.lon) > half + 0.35 || Math.abs(lat - ll.lat) > half + 0.35) { pts.push(null); continue; }
           const id = idAt(lon, lat);
           if (!isOn(id)) { pts.push(null); continue; }
           const [m] = maskInset(lon, lat, id);
-          if (m < 0.22) { pts.push(null); continue; }
-          pts.push(place(lon, lat, 0.00022));
+          if (m < 0.22 || slope(lon, lat) > 0.045) { pts.push(null); continue; }
+          pts.push(place(lon, lat, 0.00028));
         }
         let run = [];
         const flush = () => {
           if (run.length < 2) { run = []; return; }
-          const w = 0.00020 * (rv.w || 3);
+          const w = 0.00016;
           let s = 0;
-          for (let i = 0; i < run.length; i++) {
-            const a = run[Math.max(0, i - 1)].p, b = run[Math.min(run.length - 1, i + 1)].p;
-            const d = b.clone().sub(a);
-            d.addScaledVector(up.copy(run[i].p).normalize(), -d.dot(up));
-            if (d.lengthSq() < 1e-12) { run = []; return; }
-            d.normalize();
-            const nn = new THREE.Vector3().crossVectors(up, d).normalize().multiplyScalar(w * (i === 0 || i === run.length - 1 ? 0.35 : 1));
-            if (i) s += run[i].p.distanceTo(run[i - 1].p);
-            const base = rpos.length / 3;
-            const p = run[i].p;
-            rpos.push(p.x + nn.x, p.y + nn.y, p.z + nn.z, p.x - nn.x, p.y - nn.y, p.z - nn.z);
-            ruv.push(s * 80, 0, s * 80, 1);
-            rhh.push(run[i].hh, run[i].hh);
-            if (i) ridx.push(base - 2, base - 1, base, base - 1, base + 1, base);
+          const pushQuad = (pos, uv, hh, idx, a, b, c, d, ha, hb) => {
+            const base = pos.length / 3;
+            pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+            uv.push(s, 0, s, 1, s + 1, 1, s + 1, 0);
+            hh.push(ha, ha, hb, hb);
+            idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          };
+          for (let i = 0; i < run.length - 1; i++) {
+            const p = run[i].p, q = run[i + 1].p;
+            const step = q.clone().sub(p);
+            const radial = p.clone().normalize();
+            step.addScaledVector(radial, -step.dot(radial));
+            const len = step.length();
+            if (len < 1e-5 || len > 0.0012) continue;
+            step.multiplyScalar(1 / len);
+            const side = new THREE.Vector3().crossVectors(radial, step);
+            if (side.lengthSq() < 1e-8) continue;
+            side.normalize();
+            const nw = side.clone().multiplyScalar(w), bw = side.clone().multiplyScalar(w * 2.3);
+            const qrad = q.clone().normalize();
+            const side2 = new THREE.Vector3().crossVectors(qrad, step);
+            if (side2.dot(side) < 0) side2.negate();
+            side2.normalize();
+            const nw2 = side2.clone().multiplyScalar(w), bw2 = side2.clone().multiplyScalar(w * 2.3);
+            pushQuad(bpos, buv, bhh, bidx, p.clone().sub(bw), p.clone().add(bw), q.clone().add(bw2), q.clone().sub(bw2), run[i].hh, run[i + 1].hh);
+            pushQuad(rpos, ruv, rhh, ridx, p.clone().sub(nw), p.clone().add(nw), q.clone().add(nw2), q.clone().sub(nw2), run[i].hh, run[i + 1].hh);
+            s += 1;
           }
           run = [];
         };
-        for (const p of pts) { if (!p) flush(); else run.push(p); }
+        let last = null;
+        for (const p of pts) {
+          if (!p || (last && Math.abs(p.hh - last.hh) > 0.06)) { flush(); last = null; if (!p) continue; }
+          run.push(p); last = p;
+        }
         flush();
       }
-      if (ridx.length) {
+      // Steep ground turns this ribbon into shards, so the satellite water stands in for now.
+      if (false && bidx.length) {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(bpos, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(buv, 2));
+        g.setAttribute('hh', new THREE.Float32BufferAttribute(bhh, 1));
+        g.setIndex(bidx);
+        const mesh = new THREE.Mesh(g, mats.bank);
+        mesh.frustumCulled = false; mesh.renderOrder = 4;
+        root.add(mesh);
+      }
+      if (false && ridx.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(rpos, 3));
         g.setAttribute('uv', new THREE.Float32BufferAttribute(ruv, 2));
         g.setAttribute('hh', new THREE.Float32BufferAttribute(rhh, 1));
         g.setIndex(ridx);
         const mesh = new THREE.Mesh(g, mats.river);
-        mesh.frustumCulled = false; mesh.renderOrder = 4;
+        mesh.frustumCulled = false; mesh.renderOrder = 5;
         root.add(mesh);
       }
     }
@@ -720,7 +837,10 @@ gl_Position=projectionMatrix*mvPosition;`);
           const id = idAt(x, y);
           if (isOn(id) && waterAt(x, y) > 0.45) wet++;
         }
-        if (wet < 2 || qi > 4000) continue;
+        if (wet < 4 || qi > 4000) continue;
+        let wide = 0;
+        for (const [dx, dy] of [[0.1, 0], [-0.1, 0], [0, 0.1], [0, -0.1]]) if (waterAt(lon + dx, lat + dy) > 0.4) wide++;
+        if (wide < 3) continue;
         const base = qi;
         for (const [x, y] of corners) {
           const o = place(x, y, 0.0002);
@@ -728,7 +848,8 @@ gl_Position=projectionMatrix*mvPosition;`);
         }
         qidx.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
       }
-      if (qidx.length) {
+      const nearLake = Math.hypot(ll.lon + 69.2, ll.lat + 16) < 1.4;
+      if (nearLake && qidx.length) {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(qpos, 3));
         g.setAttribute('uv', new THREE.Float32BufferAttribute(quv, 2));
@@ -791,11 +912,18 @@ gl_Position=projectionMatrix*mvPosition;`);
   }
 
   function applyWin() {
-    // The close patch sits on the existing terrain. Leaving that terrain in place
-    // avoids a hole if the camera drifts to the edge of the patch.
     winOn.value = 0;
-    mats.patch.userData.u.br.value = isBrazil() ? 1 : 0;
-    mats.patch.userData.u.rioOn.value = 0;
+    const u = mats.patch.userData.u;
+    u.br.value = isBrazil() ? 1 : 0;
+    const rio = flags && flags.rio > 0.4 && flags.rioB;
+    u.rioOn.value = rio ? flags.rio : 0;
+    if (rio) u.rioB.value.set(flags.rioB[0], flags.rioB[1], flags.rioB[2], flags.rioB[3]);
+    if (tiles && tiles.ready && tiles.box && tiles.tex) {
+      u.sat.value = tiles.tex;
+      u.satOn.value = 1;
+      const b = tiles.box;
+      u.satBox.value.set(b.lon0, b.lat0, b.lon1, b.lat1);
+    } else u.satOn.value = 0;
   }
 
   function syncLive() {
@@ -908,8 +1036,9 @@ gl_Position=projectionMatrix*mvPosition;`);
 
   function clearance(ll) {
     if (!maps || !ll || (flags && flags.city)) return;
-    const h = height01(ll.lon, ll.lat);
-    const r = 1.5 + PU.lift.value + h * h * PU.vex.value + 0.00042;
+    let h = 0;
+    for (const [dx, dy] of [[0, 0], [0.08, 0], [-0.08, 0], [0, 0.08], [0, -0.08]]) h = Math.max(h, height01(ll.lon + dx, ll.lat + dy));
+    const r = 1.5 + PU.lift.value + h * h * PU.vex.value + 0.0015;
     if (C.position.length() < r) C.position.setLength(r);
   }
 
