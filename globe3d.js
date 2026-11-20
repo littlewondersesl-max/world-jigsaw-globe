@@ -3,7 +3,7 @@
 // (towns, trees, rivers) and drops it again when you zoom out. Rio's hand-built model still loads up close.
 import * as THREE from 'three';
 import {OrbitControls} from './previews/brazil/OrbitControls.js';import {loadCity} from './previews/lib/city.js';import {CITIES} from './previews/lib/cities.js';
-import {attachSADetail} from './detail/sa-detail.js?v=sa20';
+import {attachSADetail} from './detail/sa-detail.js?v=sa24';
 const P='previews/brazil/';
 const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});R.setPixelRatio(Math.min(1.5,devicePixelRatio));
 R.toneMapping=THREE.ACESFilmicToneMapping;R.domElement.id='globe';host.prepend(R.domElement);
@@ -173,7 +173,15 @@ const LW=new THREE.Vector3();function labels(){if(lblBox.hidden)return;const r=R
 // ---- close-up miniature for every placed South American country (one region, unloaded when you zoom out) ----
 const saFlags={city:false,rio:0,rioB:null};
 const saTiles={tex:null,box:null,ready:false};
-const detail=attachSADetail(THREE,{G,C,O,PU,SU,U,SAN,isBrazil:()=>brPlaced,flags:saFlags,tiles:saTiles});
+// Placed-land mask for close-ups outside South America. White means a country is on the globe.
+const MASK_W=4096,MASK_H=2048,landC=document.createElement('canvas');landC.width=MASK_W;landC.height=MASK_H;
+const landX=landC.getContext('2d');const landTex=new THREE.CanvasTexture(landC);
+landTex.colorSpace=THREE.LinearSRGBColorSpace;landTex.generateMipmaps=false;landTex.minFilter=landTex.magFilter=THREE.LinearFilter;landTex.wrapS=THREE.RepeatWrapping;
+const placedFeats=[];
+function paintLand(f){if(!f||!f.geometry)return;placedFeats.push(f);const gp=d3.geoPath(eq(MASK_W,MASK_H),landX);landX.beginPath();gp(f);landX.fillStyle='#fff';landX.fill();landX.lineWidth=3;landX.strokeStyle='#fff';landX.stroke();landTex.needsUpdate=true;}
+function clearLand(){placedFeats.length=0;landX.clearRect(0,0,MASK_W,MASK_H);landTex.needsUpdate=true;}
+function coversLL(lon,lat){const p=[lon,lat];for(const f of placedFeats){try{if(d3.geoContains(f,p))return true;}catch(e){}}return false;}
+const detail=attachSADetail(THREE,{G,C,O,PU,SU,U,SAN,isBrazil:()=>brPlaced,flags:saFlags,tiles:saTiles,land:landTex,covers:coversLL});
 // ---- city streaming (LOD + activity gating) ----
 const KM=1.5/6371;let brPlaced=false;const CS=(CITIES.BR||[]).map((c,i)=>({...c,base:c.base.replace('../','previews/'),i,state:'idle',obj:null}));
 for(const c of CS){c.up=sv(c.lon,c.lat);c.pos=c.up.clone().multiplyScalar(1.5+.004+.00004);}
@@ -186,7 +194,7 @@ const ss=(a,b,x)=>{const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t
 const TG=new THREE.Vector3(),UP=new THREE.Vector3(),YY=new THREE.Vector3(0,1,0),VD=new THREE.Vector3(),wp=new THREE.Vector3();
 function anySA(){if(brPlaced)return true;const a=SU.on.value;for(let i=1;i<a.length;i++)if(a[i]>.5)return true;return false;}
 function tilt(alt){const ll=detail.viewLL();const inSA=ll&&ll.lon>-84&&ll.lon<-32&&ll.lat>-58&&ll.lat<14;
- const hug=brPlaced||(anySA()&&inSA&&alt<.12);const k=hug?ss(.06,.02,alt):0;C.getWorldDirection(VD);const o=C.position,b=o.dot(VD),r=1.5+PU.lift.value+.000005,cc=o.lengthSq()-r*r,disc=b*b-cc;
+ const hug=alt<.12&&(brPlaced||(anySA()&&inSA)||(ll&&coversLL(ll.lon,ll.lat)));const k=hug?ss(.06,.02,alt):0;C.getWorldDirection(VD);const o=C.position,b=o.dot(VD),r=1.5+PU.lift.value+.000005,cc=o.lengthSq()-r*r,disc=b*b-cc;
  let Pt;if(disc>0)Pt=o.clone().addScaledVector(VD,-b-Math.sqrt(disc));else Pt=o.clone().normalize().multiplyScalar(r);
  TG.set(0,0,0).lerp(Pt,k);O.target.copy(TG);UP.copy(YY).lerp(Pt.clone().normalize(),k).normalize();C.up.copy(UP);
  O._quat.setFromUnitVectors(C.up,YY);O._quatInverse.copy(O._quat).invert();
@@ -201,7 +209,8 @@ function lod(){C.updateMatrixWorld();FR.setFromProjectionMatrix(PM.multiplyMatri
  let far=Math.min(dist+2.5,hz*1.3+.02);if(alt>.45)far=Math.max(far,96);C.far=far;C.updateProjectionMatrix();bg.position.copy(C.position);bg.scale.setScalar(C.far*.9/100);
  tileUpdate(alt);
  saFlags.city=false;saFlags.rio=0;PU.flatA.value=0;
- if(brPlaced){
+ // Rio's hand-built model is only on the showcase page. The game uses the same satellite close-up as every other city.
+if(false&&brPlaced){
  for(const c of CS){c.pos.copy(c.up).multiplyScalar(1.5+PU.lift.value+.00003);if(c.obj)c.obj.root.matrix.setPosition(c.pos);
   wp.copy(c.pos).applyMatrix4(G.matrixWorld);const d=C.position.distanceTo(wp);
   if(c.state==='idle'&&d<.26)load(c);if(c.state!=='idle'&&d>.4)unload(c);
@@ -212,7 +221,8 @@ function lod(){C.updateMatrixWorld();FR.setFromProjectionMatrix(PM.multiplyMatri
     if(Math.abs(Lc.x)<hx&&Math.abs(Lc.z)<hz2)h=Math.max(h,c.obj.hAt(Lc.x,Lc.z));h=Math.max(h,0);if(Lc.y<h+.04){Lc.y=h+.04;C.position.copy(c.obj.root.localToWorld(Lc))}}
    PU.con.value[c.i]=a>.55?1:0;PU.cw.value[c.i]=ss(.16,.09,d)}}
  }
- const dw=detail.update(alt);if(dw>.45)tileMesh.visible=false;}
+ const dw=detail.update(alt);if(dw>.45)tileMesh.visible=false;
+ for(const M of AM.values())if(M.on)M.mesh.visible=dw<.4;}
 // ---- sound ----
 let AC=null;function doosh(){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const A=AC,T=A.currentTime;
 const len=A.sampleRate*1.2,b=A.createBuffer(1,len,A.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
@@ -262,8 +272,8 @@ function amMake(f,near){let polys=amPolys(f,near);const raw=amBBox(polys);if(raw
    void main(){vec4 m=texture2D(map,vu);if(m.a<.15)discard;vec3 mp=pow(m.rgb,vec3(2.2));float l=dot(normalize(wn),sun);
    vec3 col=mp*(.22+1.*smoothstep(-.1,.35,l));gl_FragColor=vec4(pow(col,vec3(1./2.2)),m.a*fade);}`});
  const mesh=new THREE.Mesh(g,mat);mesh.frustumCulled=false;mesh.renderOrder=2;mesh.visible=false;G.add(mesh);return {mesh,fade,tex,g};}
-function amShow(f,near){let M=AM.get(f.name);if(!M){M=amMake(f,!!near);AM.set(f.name,M);}M.mesh.visible=true;M.fade.value=1;return M;}
-function amClear(){for(const M of AM.values())M.mesh.visible=false;}
+function amShow(f,near){let M=AM.get(f.name);if(!M){M=amMake(f,!!near);AM.set(f.name,M);}M.on=true;M.mesh.visible=true;M.fade.value=1;return M;}
+function amClear(){for(const M of AM.values()){M.on=false;M.mesh.visible=false;}}
 // Close-up terrain for every country. Sentinel-2 cloudless tiles (Copernicus, CC BY 4.0, processed by EOX)
 // are fetched only for the patch in front of the camera, and only once the view is close enough to need them.
 let hdClose=false;function hdRegion(){return true;}
@@ -290,7 +300,12 @@ function tileGet(z,x,y){const n=2**z;x=(x%n+n)%n;y=Math.max(0,Math.min(n-1,y));c
  const rec={ok:false,im:new Image()};rec.im.crossOrigin='anonymous';rec.im.onload=()=>{rec.ok=true;tileStamp++;};rec.im.onerror=()=>{rec.bad=true;};
  rec.im.src=TILE+z+'/'+y+'/'+x+'.jpg';tileCache.set(k,rec);if(tileCache.size>120){const first=tileCache.keys().next().value;tileCache.delete(first);}return rec;}
 function tilePaint(lon,lat,z){const t=merc(lon,lat,z),n=TILE_N,x0=Math.floor(t.x)-(n>>1),y0=Math.floor(t.y)-(n>>1),ctx=tileCanvas.getContext('2d'),cell=TILE_PX/n;
- ctx.clearRect(0,0,TILE_PX,TILE_PX);let ready=0;for(let j=0;j<n;j++)for(let i=0;i<n;i++){const rec=tileGet(z,x0+i,y0+j);if(!rec.ok)continue;ctx.drawImage(rec.im,i*cell,j*cell,cell,cell);ready++;}
+ ctx.clearRect(0,0,TILE_PX,TILE_PX);const miss=[];let ready=0;
+ for(let j=0;j<n;j++)for(let i=0;i<n;i++){const rec=tileGet(z,x0+i,y0+j);if(!rec.ok){miss.push(i,j);continue;}ctx.drawImage(rec.im,i*cell,j*cell,cell,cell);ready++;}
+ // A tile that never arrives would be a black square. Copy the nearest loaded one into the gap.
+ if(ready&&miss.length){for(let k=0;k<miss.length;k+=2){const i=miss[k],j=miss[k+1];let bi=i,bj=j,bd=99;
+  for(let jj=0;jj<n;jj++)for(let ii=0;ii<n;ii++){if(!tileGet(z,x0+ii,y0+jj).ok)continue;const d=Math.abs(ii-i)+Math.abs(jj-j);if(d&&d<bd){bd=d;bi=ii;bj=jj;}}
+  if(bd<99)ctx.drawImage(tileCanvas,bi*cell,bj*cell,cell,cell,i*cell,j*cell,cell,cell);}}
  tileTex.needsUpdate=true;const nw=unmerc(x0,y0,z),se=unmerc(x0+n,y0+n,z);return {ready,lon0:nw[0],lat1:nw[1],lon1:se[0],lat0:se[1]};}
 function tileShape(b){const N=32,pos=[],uv=[],idx=[];
  for(let j=0;j<=N;j++)for(let i=0;i<=N;i++){const u=i/N,v=j/N,lon=b.lon0+(b.lon1-b.lon0)*u,lat=b.lat1-(b.lat1-b.lat0)*v;
@@ -309,13 +324,13 @@ saTiles.grab=()=>{if(!tileBox||tileBox.ready<8)return null;const ctx=tileCanvas.
  return {box:{lon0:tileBox.lon0,lat0:tileBox.lat0,lon1:tileBox.lon1,lat1:tileBox.lat1},data:ctx.getImageData(0,0,TILE_PX,TILE_PX).data,w:TILE_PX,h:TILE_PX};};
 saTiles.stamp=()=>tileBox&&tileBox.ready>=8?(Math.round(tileBox.lon0*5)+','+Math.round(tileBox.lat0*5)+':1'):'0';
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
- markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
+ markHd(f,cont);paintLand(f);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
  const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
  if(hdRegion(cont)){const M=amShow(f,/Europe|Africa/.test(cont||''));if(M){M.fade.value=0;await anim(700,x=>M.fade.value=ease(x));}return}
  fctx.clearRect(0,0,2048,1024);paint(fctx,2048,1024,f,cont);freshT.needsUpdate=true;LU.pm.value=0;LU.rc.value.copy(sv(f.c[0],f.c[1]));const maxR=f.rad*2.2+.05;
  await anim(1300,x=>LU.rv.value=ease(x)*maxR);paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;fctx.clearRect(0,0,2048,1024);freshT.needsUpdate=true;LU.rv.value=0;});return queue}
-function placeNow(f,cont){markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(hdRegion(cont)){amShow(f,/Europe|Africa/.test(cont||''));return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
-function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;hdClose=false;PU.rv.value=0;amClear();if(tileMesh)tileMesh.visible=false;for(const c of CS)unload(c);detail.clear();}
+function placeNow(f,cont){markHd(f,cont);paintLand(f);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;PU.rv.value=2;return}const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France')return}if(hdRegion(cont)){amShow(f,/Europe|Africa/.test(cont||''));return}paint(bctx,TW,TH,f,cont);baseT.needsUpdate=true;}
+function clear(){SU.on.value.fill(0);sapatch.visible=false;bctx.clearRect(0,0,TW,TH);baseT.needsUpdate=true;brazil.visible=false;brPlaced=false;hdClose=false;PU.rv.value=0;amClear();clearLand();if(tileMesh)tileMesh.visible=false;for(const c of CS)unload(c);detail.clear();}
 let pulseEnd=0,heldTarget=false;
 function paintMark(f){fctx.clearRect(0,0,2048,1024);if(!f){freshT.needsUpdate=true;return;}const pr=eq(2048,1024),gp=d3.geoPath(pr,fctx);fctx.beginPath();gp(f);fctx.fillStyle='#fff';fctx.fill();fctx.lineWidth=8;fctx.strokeStyle='#fff';fctx.stroke();freshT.needsUpdate=true;}
 function pulse(f,ms){paintMark(f);LU.pm.value=1;pulseEnd=performance.now()+(ms||5000);}

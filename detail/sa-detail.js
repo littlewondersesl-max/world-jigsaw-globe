@@ -137,7 +137,7 @@ function treeParts() {
 }
 
 export function attachSADetail(THREE, api) {
-  const { G, C, O, PU, SU, U, SAN, isBrazil, flags, tiles } = api;
+  const { G, C, O, PU, SU, U, SAN, isBrazil, flags, tiles, land, covers } = api;
   const win = PU.win, winOn = PU.winOn;
   let maps = null, loading = false, group = null, token = 0, builtKey = '', pendingKey = '';
   let natureOn = true, muted = false, audio = null, birdAt = 0;
@@ -273,6 +273,7 @@ export function attachSADetail(THREE, api) {
     bbS: { value: SU.bb.value }, bbB: { value: PU.bb.value },
     on: SU.on, br: { value: 0 }, sun: U.sun,
     sat: { value: SU.map.value }, satOn: { value: 0 }, satBox: { value: new THREE.Vector4() },
+    land: { value: land || SU.map.value }, world: { value: 0 },
     rioOn: { value: 0 }, rioB: { value: new THREE.Vector4() },
     ctr: { value: new THREE.Vector2() }, span: { value: 1 }
   };
@@ -290,9 +291,9 @@ export function attachSADetail(THREE, api) {
         gl_Position=projectionMatrix*modelViewMatrix*vec4(wp,1.0);
       }`,
     fragmentShader: `
-      uniform sampler2D mapS, mapB, ids, sat;
+      uniform sampler2D mapS, mapB, ids, sat, land;
       uniform vec4 bbS, bbB, satBox, rioB;
-      uniform float on[16], br, rioOn, satOn, span;
+      uniform float on[16], br, rioOn, satOn, span, world;
       uniform vec2 ctr;
       uniform vec3 sun;
       varying vec3 vWp; varying vec2 vLL;
@@ -314,21 +315,47 @@ export function attachSADetail(THREE, api) {
         if(dot(raw, vec3(1.0))<0.004) discard;
         // The country mask is a few kilometres per pixel, so it stair-steps the shore.
         // Keep a thin fringe around a placed country and let the photo's own blue water draw the coast.
-        bool placed=placedId(k);
-        bool nearPlaced=placed;
-        bool nearOcean=(k==0);
-        vec2 px=vec2(1.0/1325.0, 1.0/2048.0);
-        for(int s=1;s<=3;s++){
-          float o=float(s);
-          int a=idOf(uvS+vec2(px.x*o,0.0)); int b=idOf(uvS+vec2(-px.x*o,0.0));
-          int c=idOf(uvS+vec2(0.0,px.y*o)); int d=idOf(uvS+vec2(0.0,-px.y*o));
-          if(a==0||b==0||c==0||d==0) nearOcean=true;
-          if(placedId(a)||placedId(b)||placedId(c)||placedId(d)) nearPlaced=true;
+        bool placed=false;
+        bool nearPlaced=false;
+        bool nearOcean=false;
+        if(world>0.5){
+          vec2 wuv=vec2(fract((vLL.x+180.0)/360.0), clamp((vLL.y+90.0)/180.0, 0.001, 0.999));
+          vec2 px=vec2(1.0/4096.0, 1.0/2048.0);
+          float here=texture2D(land, wuv).r;
+          placed=here>0.45;
+          nearPlaced=placed;
+          nearOcean=here<0.2;
+          for(int s=1;s<=2;s++){
+            float o=float(s);
+            float a=texture2D(land, wuv+vec2(px.x*o,0.0)).r;
+            float b=texture2D(land, wuv+vec2(-px.x*o,0.0)).r;
+            float c=texture2D(land, wuv+vec2(0.0,px.y*o)).r;
+            float d=texture2D(land, wuv+vec2(0.0,-px.y*o)).r;
+            if(a<0.2||b<0.2||c<0.2||d<0.2) nearOcean=true;
+            if(a>0.45||b>0.45||c>0.45||d>0.45) nearPlaced=true;
+          }
+        }else{
+          placed=placedId(k);
+          nearPlaced=placed;
+          nearOcean=(k==0);
+          vec2 px=vec2(1.0/1325.0, 1.0/2048.0);
+          for(int s=1;s<=3;s++){
+            float o=float(s);
+            int a=idOf(uvS+vec2(px.x*o,0.0)); int b=idOf(uvS+vec2(-px.x*o,0.0));
+            int c=idOf(uvS+vec2(0.0,px.y*o)); int d=idOf(uvS+vec2(0.0,-px.y*o));
+            if(a==0||b==0||c==0||d==0) nearOcean=true;
+            if(placedId(a)||placedId(b)||placedId(c)||placedId(d)) nearPlaced=true;
+          }
         }
         // The tile is sampled in linear light. Ocean is the pixel that is clearly bluer than it is red.
         bool water=raw.b>raw.r*1.45 && raw.g<raw.b*2.1 && raw.r<0.15 && raw.b>0.015;
-        if(water && (k==0 || nearOcean)) discard;
-        if(!nearPlaced) discard;
+        if(world>0.5){
+          if(!nearPlaced) discard;
+          if(!placed && water) discard;
+        }else{
+          if(water && (k==0 || nearOcean)) discard;
+          if(!nearPlaced) discard;
+        }
         // One daylight grade for every region. The photo is linear; this opens the shadows and holds the highlights.
         float lum=dot(raw, vec3(0.30,0.50,0.20));
         float sh=1.0-smoothstep(0.01, 0.055, lum);
@@ -398,6 +425,17 @@ export function attachSADetail(THREE, api) {
     };
   }
   function inBox(ll) { return ll.lon > -84 && ll.lon < -32 && ll.lat > -58 && ll.lat < 14; }
+  function onLand(ll) {
+    if (!ll) return false;
+    if (covers && covers(ll.lon, ll.lat)) return true;
+    if (inBox(ll) && maps && overPlaced(ll)) return true;
+    if (covers) {
+      for (const [dx, dy] of [[0.5, 0], [-0.5, 0], [0, 0.4], [0, -0.4]]) {
+        if (covers(ll.lon + dx, ll.lat + dy)) return true;
+      }
+    }
+    return false;
+  }
   function idAt(lon, lat) {
     if (!maps) return 0;
     const [u, v] = uvOf(SA, lon, lat);
@@ -512,9 +550,7 @@ export function attachSADetail(THREE, api) {
   }
   function reliefAt(alt) {
     const ll = viewLL();
-    if (!ll || !inBox(ll) || !anyOn()) return 0;
-    if (!maps) return 0;
-    if (!overPlaced(ll)) return 0;
+    if (!ll || !onLand(ll)) return 0;
     const t = Math.min(1, Math.max(0, (alt - 0.092) / (0.042 - 0.092)));
     const s = t * t * (3 - 2 * t);
     return s;
@@ -895,7 +931,12 @@ export function attachSADetail(THREE, api) {
     u.rioOn.value = rio ? flags.rio : 0;
     if (rio) u.rioB.value.set(flags.rioB[0], flags.rioB[1], flags.rioB[2], flags.rioB[3]);
     const rect = group && group.userData.rect;
-    if (rect) { u.ctr.value.set((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2); u.span.value = (rect[2] - rect[0]) / 2; }
+    if (rect) {
+      u.ctr.value.set((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2);
+      u.span.value = (rect[2] - rect[0]) / 2;
+      const cLon = u.ctr.value.x, cLat = u.ctr.value.y;
+      u.world.value = (cLon > -84 && cLon < -32 && cLat > -58 && cLat < 14) ? 0 : 1;
+    }
     if (tiles && tiles.ready && tiles.box && tiles.tex) {
       u.sat.value = tiles.tex;
       u.satOn.value = 1;
@@ -1027,8 +1068,8 @@ export function attachSADetail(THREE, api) {
     const oldV = 0.03 + (0.00113 - 0.03) * smooth(0.25, 0.04, alt);
     PU.vex.value = oldV * (1 - w) + VEX0 * w;
     syncLive();
-    if (w > 0.55 && maps && ll) {
-      schedule(ll, spanFor(alt), !!(flags && flags.rio));
+    if (w > 0.55 && ll) {
+      schedule(ll, spanFor(alt), false);
       if (group) applyWin();
       clearance(ll);
     } else if (w < 0.18) {
