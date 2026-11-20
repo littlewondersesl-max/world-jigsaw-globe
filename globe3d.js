@@ -3,7 +3,7 @@
 // (towns, trees, rivers) and drops it again when you zoom out. Rio's hand-built model still loads up close.
 import * as THREE from 'three';
 import {OrbitControls} from './previews/brazil/OrbitControls.js';import {loadCity} from './previews/lib/city.js';import {CITIES} from './previews/lib/cities.js';
-import {attachSADetail} from './detail/sa-detail.js?v=sa8';
+import {attachSADetail} from './detail/sa-detail.js?v=sa20';
 const P='previews/brazil/';
 const host=document.getElementById('stage');const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});R.setPixelRatio(Math.min(1.5,devicePixelRatio));
 R.toneMapping=THREE.ACESFilmicToneMapping;R.domElement.id='globe';host.prepend(R.domElement);
@@ -300,11 +300,14 @@ function tileShape(b){const N=32,pos=[],uv=[],idx=[];
 let tileBox=null;
 const TILE_R=1.5015;
 function tileUpdate(alt){if(!hdClose||alt>.22){tileMesh.visible=false;return;}const hit=sphereHit(0,0);if(!hit){tileMesh.visible=false;return;}
- const deg=viewDeg(),z=tileZ(deg),q=Math.max(4,2**(z-6)),key=z+':'+Math.round(hit.lon*q)+':'+Math.round(hit.lat*q);
+ const deg=viewDeg(),z=tileZ(deg),key=z+':'+Math.round(hit.lon*4)+':'+Math.round(hit.lat*4);
  if(key!==tileKey||tileStamp){const prev=tileStamp;tileStamp=0;tileBox=tilePaint(hit.lon,hit.lat,z);if(tileBox.ready){tileShape(tileBox);tileKey=key;}else tileStamp=prev?prev:1;}
  const show=!!(tileBox&&tileBox.ready>=Math.min(4,TILE_N));
  tileMesh.visible=show;if(show)tileMesh.scale.setScalar(TILE_R);
  if(tileBox){saTiles.tex=tileTex;saTiles.box=tileBox;saTiles.ready=tileBox.ready>=Math.min(4,TILE_N);} }
+saTiles.grab=()=>{if(!tileBox||tileBox.ready<8)return null;const ctx=tileCanvas.getContext('2d',{willReadFrequently:true});
+ return {box:{lon0:tileBox.lon0,lat0:tileBox.lat0,lon1:tileBox.lon1,lat1:tileBox.lat1},data:ctx.getImageData(0,0,TILE_PX,TILE_PX).data,w:TILE_PX,h:TILE_PX};};
+saTiles.stamp=()=>tileBox&&tileBox.ready>=8?(Math.round(tileBox.lon0*5)+','+Math.round(tileBox.lat0*5)+':1'):'0';
 function reveal(f,cont,muted){queue=queue.then(async()=>{if(!muted)doosh();
  markHd(f,cont);if(f.name==='Brazil'){brazil.visible=true;brPlaced=true;await anim(1600,x=>PU.rv.value=ease(x)*1.45);PU.rv.value=2;return}
  const si=saId(f.name);if(si>0){sapatch.visible=true;SU.on.value[si]=1;if(f.name!=='France'){SU.rid.value=si;SU.rc.value.copy(sv(f.c[0],f.c[1]));const mr=f.rad*2.2+.05;await anim(1300,x=>SU.rr.value=ease(x)*mr);SU.rid.value=-1;return}}
